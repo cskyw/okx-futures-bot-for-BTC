@@ -1,0 +1,91 @@
+{
+  "long_entries": [
+    {
+      "price": 77602.1,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 73721.995,
+      "direction": "long",
+      "open_time": "2026-05-25T14:59:55.408675+00:00",
+      "margin": 4.316049341085995,
+      "lever": 5
+    },
+    {
+      "price": 77320.4,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 73454.37999999999,
+      "direction": "long",
+      "open_time": "2026-05-26T10:59:55.649248+00:00",
+      "margin": 4.350947963270584,
+      "lever": 5
+    }
+  ],
+  "short_entries": [
+    {
+      "price": 76705.5,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 80540.77500000001,
+      "direction": "short",
+      "open_time": "2026-05-19T01:59:55.661566+00:00",
+      "margin": 4.2559316732455725,
+      "lever": 5
+    },
+    {
+      "price": 76755.3,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 80593.065,
+      "direction": "short",
+      "open_time": "2026-05-19T11:59:56.101646+00:00",
+      "margin": 4.258977649855096,
+      "lever": 5
+    },
+    {
+      "price": 76755.3,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 80593.065,
+      "direction": "short",
+      "open_time": "2026-05-19T22:59:55.198361+00:00",
+      "margin": 4.268512323278439,
+      "lever": 5
+    },
+    {
+      "price": 76839.1,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 80681.05500000001,
+      "direction": "short",
+      "open_time": "2026-05-24T07:59:55.832935+00:00",
+      "margin": 4.448325891238641,
+      "lever": 5
+    },
+    {
+      "price": 76822.8,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 80663.94,
+      "direction": "short",
+      "open_time": "2026-05-24T13:59:56.007627+00:00",
+      "margin": 4.452499834921427,
+      "lever": 5
+    },
+    {
+      "price": 75915.5,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 79711.27500000001,
+      "direction": "short",
+      "open_time": "2026-05-27T01:59:55.995021+00:00",
+      "margin": 4.49285104315922,
+      "lever": 5
+    }
+  ],
+  "completed_long_trades": 0,
+  "completed_short_trades": 0,
+  "leverage_set": true,
+  "synced_this_run": true,
+  "pending_orders": []
+}
