@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quant Strategy Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="glass-panel">
+            <div class="header-content">
+                <div class="logo-area">
+                    <div class="pulse-dot active"></div>
+                    <h1>OKX <span class="highlight">QuantLive</span></h1>
+                </div>
+                <div class="status-badges">
+                    <span class="badge" id="modeBadge">Loading...</span>
+                    <span class="badge" id="leverBadge">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="grid-layout">
+            
+            <!-- Left Column: Metrics & Positions -->
+            <div class="left-col">
+                <!-- Metrics Row -->
+                <div class="metrics-grid">
+                    <div class="metric-card glass-panel">
+                        <h3>Total Equity</h3>
+                        <div class="value neon-text" id="totalEq">-- USDT</div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <h3>Available Margin</h3>
+                        <div class="value" id="availBal">-- USDT</div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <h3>Completed Trades</h3>
+                        <div class="value" id="completedTrades">L: 0 | S: 0</div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <h3>BTC Price</h3>
+                        <div class="value neon-text" id="btcPrice">--</div>
+                    </div>
+                </div>
+
+                <!-- Positions -->
+                <div class="positions-panel glass-panel">
+                    <h2>Live Positions (Real-time from OKX)</h2>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Side</th>
+                                    <th>Size (Cont)</th>
+                                    <th>Avg Price</th>
+                                    <th>Unrealized PnL</th>
+                                    <th>Leverage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsBody">
+                                <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Terminal -->
+            <div class="right-col">
+                <div class="terminal-panel glass-panel">
+                    <div class="terminal-header">
+                        <h2>System Logs</h2>
+                        <div class="terminal-actions">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                    </div>
+                    <div class="terminal-body" id="logTerminal">
+                        <div class="log-line">Connecting to server...</div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
