@@ -41,9 +41,10 @@ def process_pending_orders(client: OKXClient, state: StateManager):
     """
     pending = state.get("pending_orders", [])
     if not pending:
+        logger.debug("没有 pending 订单需要处理")
         return
 
-    logger.info(f"—— 检查 pending 订单，共 {len(pending)} 笔 ——")
+    logger.debug(f"检查 pending_orders，共 {len(pending)} 笔")
     remaining = []
 
     for p in pending:
@@ -91,7 +92,7 @@ def process_pending_orders(client: OKXClient, state: StateManager):
 
     state.set("pending_orders", remaining)
     state.save()
-    logger.info("—— pending 订单检查完成 ——\n")
+    logger.debug("—— pending 订单检查完成 ——\n")
 
 
 # ==================== 启动时持仓同步 ====================
@@ -105,13 +106,13 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
     情况 C: OKX 无仓 & state 有   → 清除幽灵仓位
     情况 D: 都没有                 → 正常空仓
     """
-    logger.info("—— 启动同步：从 OKX 读取真实持仓 ——")
+    logger.debug("—— 启动同步：从 OKX 读取真实持仓 ——")
     real = client.get_positions(CONFIG["inst_id"])
-    logger.info(f"  OKX 实际持仓: long={real['long']} short={real['short']}")
+    logger.debug(f"  OKX 实际持仓: long={real['long']} short={real['short']}")
 
     state_long  = state.get("long_entries",  [])
     state_short = state.get("short_entries", [])
-    logger.info(f"  本地 state : long={len(state_long)}笔  short={len(state_short)}笔")
+    logger.debug(f"  本地 state : long={len(state_long)}笔  short={len(state_short)}笔")
 
     changed = False
 
@@ -134,7 +135,7 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                 state.set("long_entries", state_long)
                 changed = True
             else:
-                logger.info(f"  [多头] state 与 OKX 一致，无需修改")
+                logger.debug(f"  [多头] state 与 OKX 一致，无需修改")
         else:
             logger.warning(
                 f"  [多头] OKX 有持仓 {okx_sz}张 均价={okx_avgpx:.2f}，state 为空，自动重建"
@@ -160,7 +161,7 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
             state.set("long_entries", [])
             changed = True
         else:
-            logger.info("  [多头] OKX 无仓，state 也为空，正常")
+            logger.debug("  [多头] OKX 无仓，state 也为空，正常")
 
     # ===== 空头同步 =====
     okx_short = real["short"]
@@ -181,7 +182,7 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                 state.set("short_entries", state_short)
                 changed = True
             else:
-                logger.info(f"  [空头] state 与 OKX 一致，无需修改")
+                logger.debug(f"  [空头] state 与 OKX 一致，无需修改")
         else:
             logger.warning(
                 f"  [空头] OKX 有持仓 {okx_sz}张 均价={okx_avgpx:.2f}，state 为空，自动重建"
@@ -213,8 +214,8 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
         state.save()
         logger.info("  同步完成，state 已更新")
     else:
-        logger.info("  同步完成，state 无需更新")
-    logger.info("—— 持仓同步结束 ——\n")
+        logger.debug("  同步完成，state 无需更新")
+    logger.debug("—— 持仓同步结束 ——\n")
 
 
 # ==================== 止盈止损管理 ====================
@@ -235,7 +236,7 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
         sl_p    = entry["sl_price"]
         pnl_pct = (price / ep) - 1.0
 
-        logger.info(
+        logger.debug(
             f"  [多头检查] entry={ep:.2f} sz={sz}张 sl={sl_p:.2f} "
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
@@ -315,7 +316,7 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
         sl_p    = entry["sl_price"]
         pnl_pct = (ep / price) - 1.0
 
-        logger.info(
+        logger.debug(
             f"  [空头检查] entry={ep:.2f} sz={sz}张 sl={sl_p:.2f} "
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
