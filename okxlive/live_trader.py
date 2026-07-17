@@ -252,30 +252,47 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                 acted = True
             continue
 
-        # ---- SL (已改用交易所挂单，本地仅保留注释) ----
-        # if price <= sl_p:
-        #     logger.info(f"  [LONG SL] 触发! entry={ep:.2f} sl={sl_p:.2f} 全平 {sz}张")
-        #     ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
-        #     if ok:
-        #         logger.info(f"  [LONG SL] 完成")
-        #         acted = True
-        #     else:
-        #         logger.error("  [LONG SL] 下单失败，保留原 entry")
-        #         new_entries.append(entry)
-        #     continue
-
-        # ---- TP2 ----
-        if tp1done and pnl_pct >= CONFIG["tp2_pct"]:
-            logger.info(f"  [LONG TP2] 触发! 全平 {sz}张")
-            ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
-            if ok:
-                state.inc("completed_long_trades")
-                logger.info(f"  [LONG TP2] 完成，累计完成多头: {state.get('completed_long_trades')}次")
-                acted = True
-            else:
-                logger.error("  [LONG TP2] 下单失败，保留原 entry")
-                new_entries.append(entry)
-            continue
+        # ---- TP2 (动态追踪止损 & 硬性止盈) ----
+        if tp1done:
+            lever = entry.get("lever", CONFIG["lever"])
+            lev_pnl_pct = pnl_pct * lever
+            
+            # 1. 硬性止盈检查 (30%)
+            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.30):
+                logger.info(f"  [LONG TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
+                ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
+                if ok:
+                    state.inc("completed_long_trades")
+                    acted = True
+                else:
+                    logger.error("  [LONG TP2] 硬性止盈下单失败")
+                    new_entries.append(entry)
+                continue
+                
+            # 2. 追踪止损激活与最高点更新
+            max_pnl = entry.get("max_pnl_pct", 0.0)
+            if lev_pnl_pct >= CONFIG.get("tp2_active_pct", 0.20):
+                if not entry.get("tp2_active"):
+                    logger.info(f"  [LONG TP2] 追踪止损已激活! 当前收益 {lev_pnl_pct*100:.2f}%")
+                entry["tp2_active"] = True
+                
+            if entry.get("tp2_active", False):
+                if lev_pnl_pct > max_pnl:
+                    entry["max_pnl_pct"] = lev_pnl_pct
+                    max_pnl = lev_pnl_pct
+                    
+                # 3. 追踪止损触发检查
+                trail_pct = CONFIG.get("tp2_trail_pct", 0.05)
+                if lev_pnl_pct <= max_pnl - trail_pct:
+                    logger.info(f"  [LONG TP2] 追踪止损触发! 最高收益 {max_pnl*100:.2f}%, 回撤至 {lev_pnl_pct*100:.2f}%，市价全平 {sz}张")
+                    ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
+                    if ok:
+                        state.inc("completed_long_trades")
+                        acted = True
+                    else:
+                        logger.error("  [LONG TP2] 追踪止损下单失败")
+                        new_entries.append(entry)
+                    continue
 
         new_entries.append(entry)
 
@@ -313,30 +330,47 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                 acted = True
             continue
 
-        # ---- SL (已改用交易所挂单，本地仅保留注释) ----
-        # if price >= sl_p:
-        #     logger.info(f"  [SHORT SL] 触发! entry={ep:.2f} sl={sl_p:.2f} 全平 {sz}张")
-        #     ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
-        #     if ok:
-        #         logger.info(f"  [SHORT SL] 完成")
-        #         acted = True
-        #     else:
-        #         logger.error("  [SHORT SL] 下单失败，保留原 entry")
-        #         new_entries.append(entry)
-        #     continue
-
-        # ---- TP2 ----
-        if tp1done and pnl_pct >= CONFIG["tp2_pct"]:
-            logger.info(f"  [SHORT TP2] 触发! 全平 {sz}张")
-            ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
-            if ok:
-                state.inc("completed_short_trades")
-                logger.info(f"  [SHORT TP2] 完成，累计完成空头: {state.get('completed_short_trades')}次")
-                acted = True
-            else:
-                logger.error("  [SHORT TP2] 下单失败，保留原 entry")
-                new_entries.append(entry)
-            continue
+        # ---- TP2 (动态追踪止损 & 硬性止盈) ----
+        if tp1done:
+            lever = entry.get("lever", CONFIG["lever"])
+            lev_pnl_pct = pnl_pct * lever
+            
+            # 1. 硬性止盈检查 (30%)
+            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.30):
+                logger.info(f"  [SHORT TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
+                ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
+                if ok:
+                    state.inc("completed_short_trades")
+                    acted = True
+                else:
+                    logger.error("  [SHORT TP2] 硬性止盈下单失败")
+                    new_entries.append(entry)
+                continue
+                
+            # 2. 追踪止损激活与最高点更新
+            max_pnl = entry.get("max_pnl_pct", 0.0)
+            if lev_pnl_pct >= CONFIG.get("tp2_active_pct", 0.20):
+                if not entry.get("tp2_active"):
+                    logger.info(f"  [SHORT TP2] 追踪止损已激活! 当前收益 {lev_pnl_pct*100:.2f}%")
+                entry["tp2_active"] = True
+                
+            if entry.get("tp2_active", False):
+                if lev_pnl_pct > max_pnl:
+                    entry["max_pnl_pct"] = lev_pnl_pct
+                    max_pnl = lev_pnl_pct
+                    
+                # 3. 追踪止损触发检查
+                trail_pct = CONFIG.get("tp2_trail_pct", 0.05)
+                if lev_pnl_pct <= max_pnl - trail_pct:
+                    logger.info(f"  [SHORT TP2] 追踪止损触发! 最高收益 {max_pnl*100:.2f}%, 回撤至 {lev_pnl_pct*100:.2f}%，市价全平 {sz}张")
+                    ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
+                    if ok:
+                        state.inc("completed_short_trades")
+                        acted = True
+                    else:
+                        logger.error("  [SHORT TP2] 追踪止损下单失败")
+                        new_entries.append(entry)
+                    continue
 
         new_entries.append(entry)
 
@@ -348,33 +382,46 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
 
 # ==================== 主逻辑 ====================
 
-def run_once():
-    logger.info("====== 开始执行策略检查 ======")
-
-    client = OKXClient(
-        api_key    = CONFIG["api_key"],
-        secret_key = CONFIG["secret_key"],
-        passphrase = CONFIG["passphrase"],
-        simulated  = CONFIG.get("simulated", True),
-    )
-    state  = StateManager(path=CONFIG["state_file"])
-    engine = StrategyEngine(CONFIG)
-
-    # ---- 首次启动：设置杠杆 ----
-    if not state.get("leverage_set"):
-        logger.info(f"设置杠杆: {CONFIG['lever']}x ...")
-        ok = client.set_leverage(CONFIG["inst_id"], CONFIG["lever"], CONFIG["td_mode"])
-        if ok:
-            state.set("leverage_set", True)
-            state.save()
-        else:
-            logger.error("杠杆设置失败，本次跳过")
-            return
-
-    # ---- 处理上次挂单中的 pending 订单 ----
+def run_high_freq_tasks(client: OKXClient, state: StateManager):
+    """
+    10秒高频任务：更新价格、处理待定订单、同步仓位、执行追踪止损
+    """
+    # 1. 获取最新市价
+    price = client.get_ticker(CONFIG["inst_id"])
+    if not price:
+        return
+        
+    # 2. 处理上次挂单中的 pending 订单
     process_pending_orders(client, state)
+    
+    # 3. 持仓同步 (从 OKX 同步真实数量)
+    sync_positions_from_okx(client, state, price)
+    
+    # 4. 止盈止损追踪管理 (10秒级高频检测)
+    acted_long  = manage_long_entries(client, state, price)
+    acted_short = manage_short_entries(client, state, price)
+    if acted_long or acted_short:
+        state.save()
 
-    # ---- 拉取 K 线 ----
+def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEngine):
+    """
+    小时级任务：拉取K线、计算信号、开仓
+    """
+    logger.info("====== 开始执行小时级策略开仓检查 ======")
+    
+    # 获取账户信息
+    account      = client.get_account_balance(ccy=CONFIG["quote_ccy"])
+    if not account:
+        return
+    total_equity = account["totalEq"]
+    avail_bal    = account["availBal"]
+    logger.info(f"账户权益: {total_equity:.4f} USDT | 可用保证金: {avail_bal:.4f} USDT")
+
+    if total_equity <= 0:
+        logger.error("账户权益为 0，检查 API 配置")
+        return
+
+    # 拉取 K 线
     klines = client.get_klines(
         instId = CONFIG["inst_id"],
         bar    = "1H",
@@ -386,7 +433,7 @@ def run_once():
 
     logger.info(f"K 线数量: {len(klines)}，最新时间: {datetime.fromtimestamp(klines[-1]['ts']/1000, tz=timezone.utc)}")
 
-    # ---- 计算信号 ----
+    # 计算信号
     signals = engine.compute(klines)
     price   = signals["price"]
     logger.info(
@@ -394,45 +441,13 @@ def run_once():
         f"MA120={signals['ma120']:.2f} | cross5={signals['cross5']} | cross10={signals['cross10']}"
     )
 
-    # ---- 每次循环都做一次持仓同步，以便及时发现并同步你在手机上的手动平仓 ----
-    sync_positions_from_okx(client, state, price)
-
-    # ---- 账户信息 ----
-    account      = client.get_account_balance(ccy=CONFIG["quote_ccy"])
-    total_equity = account["totalEq"]
-    avail_bal    = account["availBal"]
-    logger.info(f"账户权益: {total_equity:.4f} USDT | 可用保证金: {avail_bal:.4f} USDT")
-
-    if total_equity <= 0:
-        logger.error("账户权益为 0，检查 API 配置")
-        return
-
-    # ---- 止盈止损管理（优先执行） ----
-    acted_long  = manage_long_entries(client, state, price)
-    acted_short = manage_short_entries(client, state, price)
-
-    if acted_long or acted_short:
-        logger.info("本次执行了止盈/止损操作，跳过开仓信号检测")
-        state.save()
-        return
-
-    # ---- 开仓信号检测 ----
+    # 开仓信号检测
     cross5  = signals["cross5"]
     cross10 = signals["cross10"]
     ma120   = signals["ma120"]
 
     # 做多信号
     if cross5 > 0 and cross10 > 0 and price > ma120:
-        # ---- 原动态算仓位逻辑 ----
-        # margin   = total_equity * CONFIG["buy_pct"]
-        # lever    = CONFIG["lever"]
-        # notional = margin * lever
-        # logger.info(
-        #     f"[SIGNAL LONG] price={price:.2f} 保证金={margin:.2f}U "
-        #     f"({lever}x) 名义={notional:.2f}U"
-        # )
-
-        # ---- 固定张数开仓逻辑 ----
         sz       = CONFIG.get("fixed_open_sz", 0.02)
         lever    = CONFIG["lever"]
         notional = sz * CONFIG["ct_val"] * price
@@ -458,7 +473,6 @@ def run_once():
             )
             if ordId:
                 sz     = CONFIG.get("fixed_open_sz", 0.02)
-
                 pending = state.get("pending_orders", [])
                 pending.append({
                     "ordId":     ordId,
@@ -476,16 +490,6 @@ def run_once():
 
     # 做空信号
     elif cross5 < 0 and cross10 < 0 and price < ma120:
-        # ---- 原动态算仓位逻辑 ----
-        # margin   = total_equity * CONFIG["buy_pct"]
-        # lever    = CONFIG["lever"]
-        # notional = margin * lever
-        # logger.info(
-        #     f"[SIGNAL SHORT] price={price:.2f} 保证金={margin:.2f}U "
-        #     f"({lever}x) 名义={notional:.2f}U"
-        # )
-
-        # ---- 固定张数开仓逻辑 ----
         sz       = CONFIG.get("fixed_open_sz", 0.02)
         lever    = CONFIG["lever"]
         notional = sz * CONFIG["ct_val"] * price
@@ -510,12 +514,7 @@ def run_once():
                 tp_sz       = tp_sz,
             )
             if ordId:
-                # # 计算张数（和 okx_client 内部逻辑保持一致，仅用于记录）
-                # import math
-                # raw_sz = (margin * lever) / (CONFIG["ct_val"] * price)
-                # sz     = max(0.02, math.floor(raw_sz * 100) / 100)
                 sz     = CONFIG.get("fixed_open_sz", 0.02)
-
                 pending = state.get("pending_orders", [])
                 pending.append({
                     "ordId":     ordId,
@@ -534,16 +533,7 @@ def run_once():
     else:
         logger.info("无开仓信号")
 
-    # 打印当前持仓摘要
-    long_entries  = state.get("long_entries",  [])
-    short_entries = state.get("short_entries", [])
-    pending       = state.get("pending_orders", [])
-    logger.info(
-        f"当前持仓 | 多头: {len(long_entries)}笔 | 空头: {len(short_entries)}笔 | "
-        f"pending: {len(pending)}笔 | "
-        f"完成多: {state.get('completed_long_trades',0)} 完成空: {state.get('completed_short_trades',0)}"
-    )
-    logger.info("====== 策略检查完成 ======\n")
+    logger.info("====== 小时级策略检查完成 ======\n")
 
 
 # ==================== 程序入口 ====================
@@ -555,18 +545,47 @@ def main():
     logger.info(f"  交易对 : {CONFIG['inst_id']}")
     logger.info(f"  杠杆   : {CONFIG['lever']}x ({CONFIG['td_mode']})")
     logger.info(f"  模式   : {mode}")
-    logger.info(f"  buy_pct: {CONFIG['buy_pct']*100:.0f}%  sl: {CONFIG['sl_pct']*100:.0f}%  tp1: {CONFIG['tp1_pct']*100:.1f}%  tp2: {CONFIG['tp2_pct']*100:.1f}%")
+    logger.info(f"  buy_pct: {CONFIG['buy_pct']*100:.0f}%  sl: {CONFIG['sl_pct']*100:.0f}%  tp1: {CONFIG['tp1_pct']*100:.1f}%")
     logger.info("=" * 50)
 
+    client = OKXClient(
+        api_key    = CONFIG["api_key"],
+        secret_key = CONFIG["secret_key"],
+        passphrase = CONFIG["passphrase"],
+        simulated  = CONFIG.get("simulated", True),
+    )
+    state  = StateManager(path=CONFIG["state_file"])
+    engine = StrategyEngine(CONFIG)
+
+    # 首次启动：设置杠杆
+    if not state.get("leverage_set"):
+        logger.info(f"设置杠杆: {CONFIG['lever']}x ...")
+        ok = client.set_leverage(CONFIG["inst_id"], CONFIG["lever"], CONFIG["td_mode"])
+        if ok:
+            state.set("leverage_set", True)
+            state.save()
+        else:
+            logger.error("杠杆设置失败，本次跳过")
+
     # 每次程序重启时重置同步标志
-    _init_state = StateManager(path=CONFIG["state_file"])
-    _init_state.set("synced_this_run", False)
-    _init_state.save()
+    state.set("synced_this_run", False)
+    state.save()
     logger.info("已重置持仓同步标志，本次启动将重新同步 OKX 持仓\n")
 
     while True:
         try:
-            run_once()
+            now = datetime.now(timezone.utc)
+            
+            # 1. 10秒高频任务：价格更新与追踪止损
+            run_high_freq_tasks(client, state)
+            
+            # 2. 小时级任务：只在每小时的 59分50秒 之后执行一次
+            last_hour = state.get("last_entry_check_hour", -1)
+            if now.minute == 59 and now.second >= 50 and last_hour != now.hour:
+                run_hourly_tasks(client, state, engine)
+                state.set("last_entry_check_hour", now.hour)
+                state.save()
+                
         except KeyboardInterrupt:
             logger.info("手动停止")
             break
@@ -574,14 +593,8 @@ def main():
             logger.error(f"执行异常: {e}")
             logger.error(traceback.format_exc())
 
-        now    = datetime.now(timezone.utc)
-        wait_s = 3600 - (now.minute * 60 + now.second) - 5
-        if wait_s <= 0:
-            wait_s += 3600
-
-        wake = datetime.fromtimestamp(time.time() + wait_s, tz=timezone.utc)
-        logger.info(f"下次执行: {wake.strftime('%Y-%m-%d %H:%M:%S UTC')} (等待 {int(wait_s)}s)\n")
-        time.sleep(wait_s)
+        # 每 10 秒循环一次
+        time.sleep(10)
 
 
 if __name__ == "__main__":
