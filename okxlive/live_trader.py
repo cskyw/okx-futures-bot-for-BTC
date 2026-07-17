@@ -108,6 +108,10 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
     """
     logger.debug("—— 启动同步：从 OKX 读取真实持仓 ——")
     real = client.get_positions(CONFIG["inst_id"])
+    if real is None:
+        logger.error("获取 OKX 持仓失败（可能是网络异常或 API 限制），跳过本次同步，保护本地状态。")
+        return
+        
     logger.debug(f"  OKX 实际持仓: long={real['long']} short={real['short']}")
 
     state_long  = state.get("long_entries",  [])
@@ -553,7 +557,7 @@ def main():
         api_key    = CONFIG["api_key"],
         secret_key = CONFIG["secret_key"],
         passphrase = CONFIG["passphrase"],
-        simulated  = CONFIG.get("simulated", True),
+        simulated  = CONFIG.get("simulated", False), # 默认实盘，防止服务器缺少配置时连到模拟盘
     )
     state  = StateManager(path=CONFIG["state_file"])
     engine = StrategyEngine(CONFIG)

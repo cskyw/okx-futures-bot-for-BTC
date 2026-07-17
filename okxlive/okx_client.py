@@ -200,9 +200,10 @@ class OKXClient:
         """
         path = "/api/v5/account/positions"
         data = self._get(path, {"instId": instId})
+        if data is None:
+            return None # 返回 None 代表网络或API异常
+            
         result = {"long": None, "short": None}
-        if not data:
-            return result
         for pos in data.get("data", []):
             ps  = pos.get("posSide", "")
             sz  = float(pos.get("pos", 0))
