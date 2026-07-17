@@ -538,6 +538,15 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
     else:
         logger.info("无开仓信号")
 
+    # 打印当前持仓摘要
+    long_entries  = state.get("long_entries",  [])
+    short_entries = state.get("short_entries", [])
+    pending       = state.get("pending_orders", [])
+    logger.info(
+        f"当前持仓 | 多头: {len(long_entries)}笔 | 空头: {len(short_entries)}笔 | "
+        f"pending: {len(pending)}笔 | "
+        f"完成多: {state.get('completed_long_trades',0)} 完成空: {state.get('completed_short_trades',0)}"
+    )
     logger.info("====== 小时级策略检查完成 ======\n")
 
 
@@ -576,6 +585,12 @@ def main():
     state.set("synced_this_run", False)
     state.save()
     logger.info("已重置持仓同步标志，本次启动将重新同步 OKX 持仓\n")
+
+    # 打印初始状态让用户安心
+    long_entries  = state.get("long_entries",  [])
+    short_entries = state.get("short_entries", [])
+    logger.info(f"成功加载本地持仓记录 | 多头: {len(long_entries)}笔 | 空头: {len(short_entries)}笔")
+    logger.info("高频追踪雷达已启动！(每10秒后台静默巡航，触发止损/开仓时才会发声)\n")
 
     while True:
         try:
