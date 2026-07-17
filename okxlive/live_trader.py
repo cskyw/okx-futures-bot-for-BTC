@@ -240,22 +240,16 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 ----
+        # ---- TP1 (已改用交易所挂单，本地仅检测是否成交) ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
-            close_sz = max(0.01, round(sz * CONFIG["tp1_sell_prop"], 2))
-            logger.info(f"  [LONG TP1] 触发! 平 {close_sz}张")
-            ok = client.close_long(CONFIG["inst_id"], close_sz, CONFIG["td_mode"])
-            if ok:
+            # 如果 OKX 已经执行了限价平仓，sync_positions 会将张数缩小
+            # 这里我们只负责将 tp1_done 标记为 True，并且移动止损线
+            expected_sz = max(0.01, round(CONFIG.get("fixed_open_sz", 0.02) * (1 - CONFIG["tp1_sell_prop"]), 2))
+            if sz <= expected_sz + 0.001:
                 entry["tp1_done"] = True
-                entry["sz"]       = round(sz - close_sz, 2)
-                entry["sl_price"] = ep
-                if entry["sz"] >= 0.01:
-                    new_entries.append(entry)
-                logger.info(f"  [LONG TP1] 完成，剩余 {entry['sz']}张，止损移至 {ep:.2f}")
+                entry["sl_price"] = ep # 止损移至开仓价 (保本)
+                logger.info(f"  [LONG TP1] 检测到交易所已平半仓，标记完成，剩余 {sz}张，止损移至 {ep:.2f}")
                 acted = True
-            else:
-                logger.error("  [LONG TP1] 下单失败，保留原 entry")
-                new_entries.append(entry)
             continue
 
         # ---- SL (已改用交易所挂单，本地仅保留注释) ----
@@ -309,22 +303,14 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 ----
+        # ---- TP1 (已改用交易所挂单，本地仅检测是否成交) ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
-            close_sz = max(0.01, round(sz * CONFIG["tp1_sell_prop"], 2))
-            logger.info(f"  [SHORT TP1] 触发! 平 {close_sz}张")
-            ok = client.close_short(CONFIG["inst_id"], close_sz, CONFIG["td_mode"])
-            if ok:
+            expected_sz = max(0.01, round(CONFIG.get("fixed_open_sz", 0.02) * (1 - CONFIG["tp1_sell_prop"]), 2))
+            if sz <= expected_sz + 0.001:
                 entry["tp1_done"] = True
-                entry["sz"]       = round(sz - close_sz, 2)
-                entry["sl_price"] = ep
-                if entry["sz"] >= 0.01:
-                    new_entries.append(entry)
-                logger.info(f"  [SHORT TP1] 完成，剩余 {entry['sz']}张，止损移至 {ep:.2f}")
+                entry["sl_price"] = ep # 止损移至开仓价 (保本)
+                logger.info(f"  [SHORT TP1] 检测到交易所已平半仓，标记完成，剩余 {sz}张，止损移至 {ep:.2f}")
                 acted = True
-            else:
-                logger.error("  [SHORT TP1] 下单失败，保留原 entry")
-                new_entries.append(entry)
             continue
 
         # ---- SL (已改用交易所挂单，本地仅保留注释) ----
@@ -457,6 +443,7 @@ def run_once():
         )
 
         if avail_bal >= margin:
+            tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
             ordId = client.open_long(
                 instId      = CONFIG["inst_id"],
                 usdt_margin = margin,
@@ -466,6 +453,8 @@ def run_once():
                 td_mode     = CONFIG["td_mode"],
                 offset      = CONFIG.get("limit_offset", 0.001),
                 sl_pct      = CONFIG.get("sl_pct", 0.05),
+                tp_pct      = CONFIG.get("tp1_pct", 0.03),
+                tp_sz       = tp_sz,
             )
             if ordId:
                 sz     = CONFIG.get("fixed_open_sz", 0.02)
@@ -507,6 +496,7 @@ def run_once():
         )
 
         if avail_bal >= margin:
+            tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
             ordId = client.open_short(
                 instId      = CONFIG["inst_id"],
                 usdt_margin = margin,
@@ -516,6 +506,8 @@ def run_once():
                 td_mode     = CONFIG["td_mode"],
                 offset      = CONFIG.get("limit_offset", 0.001),
                 sl_pct      = CONFIG.get("sl_pct", 0.05),
+                tp_pct      = CONFIG.get("tp1_pct", 0.03),
+                tp_sz       = tp_sz,
             )
             if ordId:
                 # # 计算张数（和 okx_client 内部逻辑保持一致，仅用于记录）

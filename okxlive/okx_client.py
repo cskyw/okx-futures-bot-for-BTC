@@ -272,6 +272,8 @@ class OKXClient:
         td_mode:     str = "cross",
         offset:      float = 0.0001,
         sl_pct:      float = None,
+        tp_pct:      float = None,
+        tp_sz:       float = None,
     ) -> Optional[str]:
         """
         开多：限价挂单，低于当前价 offset 处挂单
@@ -292,13 +294,29 @@ class OKXClient:
             "sz":      self._fmt_sz(sz),
         }
         
+        algo_ords = []
+        
+        # 1. 附带止损单 (保底止损, 默认全仓)
         if sl_pct:
             sl_price = round(limit_price * (1 - sl_pct), 1)
-            body["attachAlgoOrds"] = [{
+            algo_ords.append({
                 "attachAlgoOrdType": "conditional",
                 "slTriggerPx": str(sl_price),
                 "slOrdPx": "-1"
-            }]
+            })
+            
+        # 2. 附带止盈单 (第一档止盈, 指定张数)
+        if tp_pct and tp_sz:
+            tp_price = round(limit_price * (1 + tp_pct), 1)
+            algo_ords.append({
+                "attachAlgoOrdType": "conditional",
+                "tpTriggerPx": str(tp_price),
+                "tpOrdPx": str(tp_price), # 限价止盈
+                "sz": self._fmt_sz(tp_sz)
+            })
+            
+        if algo_ords:
+            body["attachAlgoOrds"] = algo_ords
 
         data = self._post("/api/v5/trade/order", body)
         if data and data["data"]:
@@ -342,6 +360,8 @@ class OKXClient:
         td_mode:     str = "cross",
         offset:      float = 0.0001,
         sl_pct:      float = None,
+        tp_pct:      float = None,
+        tp_sz:       float = None,
     ) -> Optional[str]:
         """
         开空：限价挂单，高于当前价 offset 处挂单
@@ -362,13 +382,29 @@ class OKXClient:
             "sz":      self._fmt_sz(sz),
         }
 
+        algo_ords = []
+        
+        # 1. 附带止损单 (保底止损, 默认全仓)
         if sl_pct:
             sl_price = round(limit_price * (1 + sl_pct), 1)
-            body["attachAlgoOrds"] = [{
+            algo_ords.append({
                 "attachAlgoOrdType": "conditional",
                 "slTriggerPx": str(sl_price),
                 "slOrdPx": "-1"
-            }]
+            })
+            
+        # 2. 附带止盈单 (第一档止盈, 指定张数)
+        if tp_pct and tp_sz:
+            tp_price = round(limit_price * (1 - tp_pct), 1)
+            algo_ords.append({
+                "attachAlgoOrdType": "conditional",
+                "tpTriggerPx": str(tp_price),
+                "tpOrdPx": str(tp_price), # 限价止盈
+                "sz": self._fmt_sz(tp_sz)
+            })
+            
+        if algo_ords:
+            body["attachAlgoOrds"] = algo_ords
 
         data = self._post("/api/v5/trade/order", body)
         if data and data["data"]:

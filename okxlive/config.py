@@ -32,7 +32,7 @@ CONFIG = {
     "tp1_pct":       0.03,     # TP1 止盈 3%（基于开仓价）
     "tp2_pct":       0.04,     # TP2 止盈 4%
     "sl_pct":        0.05,     # 止损 5%（5倍杠杆下实际亏损约25%保证金，请勿随意调大）
-    "tp1_sell_prop": 0.6,      # TP1 平掉该仓位的 60%
+    "tp1_sell_prop": 0.5,      # TP1 平掉该仓位的 50% (半仓)
 
     # ====== 文件路径 ======
     "state_file": "state/trader_state.json",
