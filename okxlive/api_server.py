@@ -46,7 +46,32 @@ def get_status():
         current_price = client.get_ticker(CONFIG["inst_id"])
 
         # Reload local state to get the latest completed trades count
-        state._data = state._load()
+        state.reload()
+
+        # Calculate statistics from trade_history
+        trade_history = state.get_trade_history()
+        total_trades = len(trade_history)
+        winning_trades = sum(1 for t in trade_history if t.get("lev_pnl_pct", 0) > 0)
+        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+        
+        # Calculate cumulative and average PnL (unleveraged)
+        cumulative_pnl_pct = sum(t.get("pnl_pct", 0) for t in trade_history)
+        avg_pnl_pct = (cumulative_pnl_pct / total_trades) if total_trades > 0 else 0
+
+        # Calculate annualized return
+        annualized_return = 0
+        start_time_str = state.get("dashboard_start_time")
+        if start_time_str:
+            try:
+                from datetime import datetime, timezone
+                start_time = datetime.fromisoformat(start_time_str)
+                now_time = datetime.now(timezone.utc)
+                days_elapsed = (now_time - start_time).total_seconds() / 86400.0
+                # Use max to prevent astronomical values if days_elapsed is near 0 (e.g. first few minutes)
+                days_elapsed = max(days_elapsed, 1.0 / 24.0) # Assume at least 1 hour has passed
+                annualized_return = (cumulative_pnl_pct / days_elapsed) * 365
+            except Exception:
+                pass
 
         return jsonify({
             "success": True,
@@ -58,8 +83,14 @@ def get_status():
                     "completed_long_trades": state.get("completed_long_trades", 0),
                     "completed_short_trades": state.get("completed_short_trades", 0),
                     "simulated": CONFIG.get("simulated", False),
-                    "lever": CONFIG.get("lever", 5)
-                }
+                    "lever": CONFIG.get("lever", 5),
+                    "win_rate": win_rate,
+                    "avg_pnl_pct": avg_pnl_pct,
+                    "total_trades_history": total_trades,
+                    "cumulative_pnl_pct": cumulative_pnl_pct,
+                    "annualized_return": annualized_return
+                },
+                "trade_history": trade_history[:50] # Send last 50 for UI
             }
         })
     except Exception as e:

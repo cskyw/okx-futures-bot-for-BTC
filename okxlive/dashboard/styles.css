@@ -115,7 +115,7 @@ h1 {
 /* Metrics */
 .metrics-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 24px;
 }
 .metric-card {
@@ -146,15 +146,15 @@ h1 {
     text-shadow: 0 0 10px rgba(255,255,255,0.3);
 }
 
-/* Positions Table */
-.positions-panel {
+/* Positions & Trades Tables */
+.positions-panel, .trades-panel {
     flex: 1;
     padding: 24px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
-.positions-panel h2 {
+.positions-panel h2, .trades-panel h2 {
     margin-bottom: 20px;
     font-size: 1.2rem;
     color: var(--accent-primary);

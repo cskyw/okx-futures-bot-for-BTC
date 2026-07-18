@@ -312,7 +312,7 @@ class OKXClient:
             algo_ords.append({
                 "attachAlgoOrdType": "conditional",
                 "tpTriggerPx": str(tp_price),
-                "tpOrdPx": str(tp_price), # 限价止盈
+                "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
                 "sz": self._fmt_sz(tp_sz)
             })
             
@@ -400,7 +400,7 @@ class OKXClient:
             algo_ords.append({
                 "attachAlgoOrdType": "conditional",
                 "tpTriggerPx": str(tp_price),
-                "tpOrdPx": str(tp_price), # 限价止盈
+                "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
                 "sz": self._fmt_sz(tp_sz)
             })
             

@@ -162,6 +162,21 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
     else:
         if state_long:
             logger.warning(f"  [多头] OKX 无持仓，state 有 {len(state_long)} 笔，清除幽灵仓位")
+            for entry in state_long:
+                ep = entry["price"]
+                lever = entry.get("lever", CONFIG["lever"])
+                pnl = (price / ep) - 1.0
+                state.add_trade_record({
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "direction": "long",
+                    "sz": entry["sz"],
+                    "entry_price": ep,
+                    "exit_price": price,
+                    "pnl_pct": pnl,
+                    "lev_pnl_pct": pnl * lever,
+                    "reason": "SL / Manual"
+                })
+                state.inc("completed_long_trades")
             state.set("long_entries", [])
             changed = True
         else:
@@ -209,10 +224,25 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
     else:
         if state_short:
             logger.warning(f"  [空头] OKX 无持仓，state 有 {len(state_short)} 笔，清除幽灵仓位")
+            for entry in state_short:
+                ep = entry["price"]
+                lever = entry.get("lever", CONFIG["lever"])
+                pnl = (ep / price) - 1.0
+                state.add_trade_record({
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "direction": "short",
+                    "sz": entry["sz"],
+                    "entry_price": ep,
+                    "exit_price": price,
+                    "pnl_pct": pnl,
+                    "lev_pnl_pct": pnl * lever,
+                    "reason": "SL / Manual"
+                })
+                state.inc("completed_short_trades")
             state.set("short_entries", [])
             changed = True
         else:
-            logger.info("  [空头] OKX 无仓，state 也为空，正常")
+            logger.debug("  [空头] OKX 无仓，state 也为空，正常")
 
     if changed:
         state.save()
@@ -253,7 +283,19 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
             if sz <= expected_sz + 0.001:
                 entry["tp1_done"] = True
                 entry["sl_price"] = ep # 止损移至开仓价 (保本)
-                logger.info(f"  [LONG TP1] 检测到交易所已平半仓，标记完成，剩余 {sz}张，止损移至 {ep:.2f}")
+                tp_sz = round(sz - expected_sz, 2)
+                lever = entry.get("lever", CONFIG["lever"])
+                state.add_trade_record({
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "direction": "long",
+                    "sz": tp_sz,
+                    "entry_price": ep,
+                    "exit_price": price,
+                    "pnl_pct": pnl_pct,
+                    "lev_pnl_pct": pnl_pct * lever,
+                    "reason": "TP1 Partial"
+                })
+                logger.info(f"  [LONG TP1] 检测到交易所已平半仓，标记完成，剩余 {expected_sz}张，止损移至 {ep:.2f}")
                 acted = True
             continue
 
@@ -267,6 +309,16 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                 logger.info(f"  [LONG TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
                 ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                 if ok:
+                    state.add_trade_record({
+                        "time": datetime.now(timezone.utc).isoformat(),
+                        "direction": "long",
+                        "sz": sz,
+                        "entry_price": ep,
+                        "exit_price": price,
+                        "pnl_pct": pnl_pct,
+                        "lev_pnl_pct": lev_pnl_pct,
+                        "reason": "TP2 Hard"
+                    })
                     state.inc("completed_long_trades")
                     acted = True
                 else:
@@ -292,6 +344,16 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                     logger.info(f"  [LONG TP2] 追踪止损触发! 最高收益 {max_pnl*100:.2f}%, 回撤至 {lev_pnl_pct*100:.2f}%，市价全平 {sz}张")
                     ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                     if ok:
+                        state.add_trade_record({
+                            "time": datetime.now(timezone.utc).isoformat(),
+                            "direction": "long",
+                            "sz": sz,
+                            "entry_price": ep,
+                            "exit_price": price,
+                            "pnl_pct": pnl_pct,
+                            "lev_pnl_pct": lev_pnl_pct,
+                            "reason": "TP2 Trail"
+                        })
                         state.inc("completed_long_trades")
                         acted = True
                     else:
@@ -331,7 +393,19 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
             if sz <= expected_sz + 0.001:
                 entry["tp1_done"] = True
                 entry["sl_price"] = ep # 止损移至开仓价 (保本)
-                logger.info(f"  [SHORT TP1] 检测到交易所已平半仓，标记完成，剩余 {sz}张，止损移至 {ep:.2f}")
+                tp_sz = round(sz - expected_sz, 2)
+                lever = entry.get("lever", CONFIG["lever"])
+                state.add_trade_record({
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "direction": "short",
+                    "sz": tp_sz,
+                    "entry_price": ep,
+                    "exit_price": price,
+                    "pnl_pct": pnl_pct,
+                    "lev_pnl_pct": pnl_pct * lever,
+                    "reason": "TP1 Partial"
+                })
+                logger.info(f"  [SHORT TP1] 检测到交易所已平半仓，标记完成，剩余 {expected_sz}张，止损移至 {ep:.2f}")
                 acted = True
             continue
 
@@ -345,6 +419,16 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                 logger.info(f"  [SHORT TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
                 ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                 if ok:
+                    state.add_trade_record({
+                        "time": datetime.now(timezone.utc).isoformat(),
+                        "direction": "short",
+                        "sz": sz,
+                        "entry_price": ep,
+                        "exit_price": price,
+                        "pnl_pct": pnl_pct,
+                        "lev_pnl_pct": lev_pnl_pct,
+                        "reason": "TP2 Hard"
+                    })
                     state.inc("completed_short_trades")
                     acted = True
                 else:
@@ -370,6 +454,16 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                     logger.info(f"  [SHORT TP2] 追踪止损触发! 最高收益 {max_pnl*100:.2f}%, 回撤至 {lev_pnl_pct*100:.2f}%，市价全平 {sz}张")
                     ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                     if ok:
+                        state.add_trade_record({
+                            "time": datetime.now(timezone.utc).isoformat(),
+                            "direction": "short",
+                            "sz": sz,
+                            "entry_price": ep,
+                            "exit_price": price,
+                            "pnl_pct": pnl_pct,
+                            "lev_pnl_pct": lev_pnl_pct,
+                            "reason": "TP2 Trail"
+                        })
                         state.inc("completed_short_trades")
                         acted = True
                     else:
@@ -538,10 +632,24 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
     else:
         logger.info("无开仓信号")
 
-    # 打印当前持仓摘要
+    # 打印当前持仓摘要及详情
     long_entries  = state.get("long_entries",  [])
     short_entries = state.get("short_entries", [])
     pending       = state.get("pending_orders", [])
+    
+    for entry in long_entries:
+        ep = entry["price"]
+        sz = entry["sz"]
+        sl_p = entry["sl_price"]
+        pnl_pct = (price / ep) - 1.0
+        logger.info(f"  [多头检查] entry={ep:.2f} sz={sz}张 sl={sl_p:.2f} pnl={pnl_pct*100:.2f}% tp1_done={entry['tp1_done']}")
+
+    for entry in short_entries:
+        ep = entry["price"]
+        sz = entry["sz"]
+        sl_p = entry["sl_price"]
+        pnl_pct = (ep / price) - 1.0
+        logger.info(f"  [空头检查] entry={ep:.2f} sz={sz}张 sl={sl_p:.2f} pnl={pnl_pct*100:.2f}% tp1_done={entry['tp1_done']}")
     logger.info(
         f"当前持仓 | 多头: {len(long_entries)}笔 | 空头: {len(short_entries)}笔 | "
         f"pending: {len(pending)}笔 | "
@@ -590,6 +698,26 @@ def main():
     long_entries  = state.get("long_entries",  [])
     short_entries = state.get("short_entries", [])
     logger.info(f"成功加载本地持仓记录 | 多头: {len(long_entries)}笔 | 空头: {len(short_entries)}笔")
+    
+    # 启动时打印一次完整的持仓检查明细，与原来保持一致
+    price = client.get_ticker(CONFIG["inst_id"])
+    if not price:
+        price = 1.0 # fallback
+        
+    for entry in long_entries:
+        ep = entry["price"]
+        sz = entry["sz"]
+        sl_p = entry["sl_price"]
+        pnl_pct = (price / ep) - 1.0
+        logger.info(f"  [多头检查] entry={ep:.2f} sz={sz}张 sl={sl_p:.2f} pnl={pnl_pct*100:.2f}% tp1_done={entry['tp1_done']}")
+
+    for entry in short_entries:
+        ep = entry["price"]
+        sz = entry["sz"]
+        sl_p = entry["sl_price"]
+        pnl_pct = (ep / price) - 1.0
+        logger.info(f"  [空头检查] entry={ep:.2f} sz={sz}张 sl={sl_p:.2f} pnl={pnl_pct*100:.2f}% tp1_done={entry['tp1_done']}")
+
     logger.info("高频追踪雷达已启动！(每10秒后台静默巡航，触发止损/开仓时才会发声)\n")
 
     while True:

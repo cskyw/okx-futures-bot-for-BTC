@@ -7,9 +7,13 @@ const totalEqEl = document.getElementById('totalEq');
 const availBalEl = document.getElementById('availBal');
 const completedTradesEl = document.getElementById('completedTrades');
 const btcPriceEl = document.getElementById('btcPrice');
+const winRateEl = document.getElementById('winRate');
+const totalPnlEl = document.getElementById('totalPnl');
+const annualReturnEl = document.getElementById('annualReturn');
 const modeBadgeEl = document.getElementById('modeBadge');
 const leverBadgeEl = document.getElementById('leverBadge');
 const positionsBodyEl = document.getElementById('positionsBody');
+const tradesBodyEl = document.getElementById('tradesBody');
 const logTerminalEl = document.getElementById('logTerminal');
 const pulseDot = document.querySelector('.pulse-dot');
 
@@ -25,6 +29,7 @@ async function fetchStatus() {
         if (data.success) {
             updateMetrics(data.data);
             updatePositions(data.data.positions);
+            if (data.data.trade_history) updateTrades(data.data.trade_history);
             pulseDot.style.backgroundColor = 'var(--long-color)';
             pulseDot.style.boxShadow = '0 0 10px var(--long-color)';
         } else {
@@ -72,6 +77,20 @@ function updateMetrics(data) {
     modeBadgeEl.style.borderColor = data.metadata.simulated ? 'rgba(255,189,46,0.3)' : 'rgba(0,230,118,0.3)';
 
     leverBadgeEl.textContent = `${data.metadata.lever}x LEVERAGE`;
+
+    if (winRateEl && data.metadata.win_rate !== undefined) {
+        winRateEl.textContent = `${parseFloat(data.metadata.win_rate).toFixed(1)}%`;
+    }
+    if (totalPnlEl && data.metadata.cumulative_pnl_pct !== undefined) {
+        const pnlVal = parseFloat(data.metadata.cumulative_pnl_pct) * 100;
+        totalPnlEl.textContent = `${pnlVal > 0 ? '+' : ''}${pnlVal.toFixed(2)}%`;
+        totalPnlEl.style.color = pnlVal > 0 ? 'var(--long-color)' : (pnlVal < 0 ? 'var(--short-color)' : 'inherit');
+    }
+    if (annualReturnEl && data.metadata.annualized_return !== undefined) {
+        const annVal = parseFloat(data.metadata.annualized_return) * 100;
+        annualReturnEl.textContent = `${annVal > 0 ? '+' : ''}${annVal.toFixed(2)}%`;
+        annualReturnEl.style.color = annVal > 0 ? 'var(--long-color)' : (annVal < 0 ? 'var(--short-color)' : 'inherit');
+    }
 }
 
 function updatePositions(positions) {
@@ -113,6 +132,42 @@ function createPositionRow(side, posData) {
         <td>${posData.lever}x</td>
     `;
     return tr;
+}
+
+function updateTrades(trades) {
+    if (!tradesBodyEl) return;
+    tradesBodyEl.innerHTML = '';
+    
+    if (trades.length === 0) {
+        tradesBodyEl.innerHTML = `<tr><td colspan="7" class="text-center" style="color: var(--text-muted);">No closed trades yet</td></tr>`;
+        return;
+    }
+    
+    trades.forEach(trade => {
+        const tr = document.createElement('tr');
+        
+        const isLong = trade.direction === 'long';
+        const sideStr = isLong ? 'LONG' : 'SHORT';
+        const sideClass = isLong ? 'text-long' : 'text-short';
+        
+        const pnl = parseFloat(trade.lev_pnl_pct) * 100 || 0;
+        const pnlColor = pnl > 0 ? 'var(--long-color)' : (pnl < 0 ? 'var(--short-color)' : 'inherit');
+        const pnlSign = pnl > 0 ? '+' : '';
+        
+        const dateObj = new Date(trade.time);
+        const timeStr = `${dateObj.getMonth()+1}-${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2,'0')}:${dateObj.getMinutes().toString().padStart(2,'0')}`;
+
+        tr.innerHTML = `
+            <td style="color: var(--text-muted); font-size: 0.85em;">${timeStr}</td>
+            <td class="${sideClass}">${sideStr}</td>
+            <td>${trade.sz}</td>
+            <td>${parseFloat(trade.entry_price).toFixed(2)}</td>
+            <td>${parseFloat(trade.exit_price).toFixed(2)}</td>
+            <td style="color: ${pnlColor}; font-weight: 600;">${pnlSign}${pnl.toFixed(2)}%</td>
+            <td style="font-size: 0.85em;">${trade.reason || '-'}</td>
+        `;
+        tradesBodyEl.appendChild(tr);
+    });
 }
 
 function renderLogs(logs) {

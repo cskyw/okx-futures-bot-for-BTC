@@ -45,6 +45,18 @@
                         <div class="value" id="completedTrades">L: 0 | S: 0</div>
                     </div>
                     <div class="metric-card glass-panel">
+                        <h3>Win Rate</h3>
+                        <div class="value neon-text" id="winRate">--%</div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <h3>Total PnL (Base)</h3>
+                        <div class="value" id="totalPnl">--%</div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <h3>Annualized Return</h3>
+                        <div class="value neon-text" id="annualReturn">--%</div>
+                    </div>
+                    <div class="metric-card glass-panel">
                         <h3>BTC Price</h3>
                         <div class="value neon-text" id="btcPrice">--</div>
                     </div>
@@ -66,6 +78,29 @@
                             </thead>
                             <tbody id="positionsBody">
                                 <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Recent Trades -->
+                <div class="trades-panel glass-panel" style="margin-top: 24px;">
+                    <h2>Recent Closed Trades</h2>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Side</th>
+                                    <th>Size</th>
+                                    <th>Entry</th>
+                                    <th>Exit</th>
+                                    <th>PnL (Lev)</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tradesBody">
+                                <tr><td colspan="7" class="text-center">No trades yet</td></tr>
                             </tbody>
                         </table>
                     </div>

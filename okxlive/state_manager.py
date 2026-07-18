@@ -17,30 +17,43 @@ DEFAULT_STATE = {
     "completed_long_trades":  0,
     "completed_short_trades": 0,
     "leverage_set":           False,
+    "dashboard_start_time":   None,
 }
 
 
 class StateManager:
     def __init__(self, path: str = "state/trader_state.json"):
         self.path = path
+        self.history_path = path.replace("trader_state.json", "trade_history.json")
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        self._data = self._load()
+        self._data = self._load(self.path, dict(DEFAULT_STATE))
+        self._history = self._load(self.history_path, [])
 
-    def _load(self) -> dict:
-        if os.path.exists(self.path):
+        if not self._data.get("dashboard_start_time"):
+            from datetime import datetime, timezone
+            self._data["dashboard_start_time"] = datetime.now(timezone.utc).isoformat()
+            self.save()
+
+    def _load(self, filepath: str, default: Any) -> Any:
+        if os.path.exists(filepath):
             try:
-                with open(self.path, "r", encoding="utf-8") as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                logger.info(f"状态已恢复自: {self.path}")
                 return data
             except Exception as e:
                 logger.warning(f"状态文件读取失败，使用默认值: {e}")
-        return dict(DEFAULT_STATE)
+        return default
+
+    def reload(self):
+        self._data = self._load(self.path, dict(DEFAULT_STATE))
+        self._history = self._load(self.history_path, [])
 
     def save(self):
         try:
             with open(self.path, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
+            with open(self.history_path, "w", encoding="utf-8") as f:
+                json.dump(self._history, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"状态保存失败: {e}")
 
@@ -55,3 +68,12 @@ class StateManager:
 
     def dump(self) -> dict:
         return dict(self._data)
+
+    def get_trade_history(self) -> list:
+        return self._history
+
+    def add_trade_record(self, record: dict, max_records: int = 200):
+        """记录历史交割单，头部插入保证最新的在最前，限制最大长度"""
+        self._history.insert(0, record)
+        if len(self._history) > max_records:
+            self._history = self._history[:max_records]
