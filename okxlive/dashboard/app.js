@@ -17,13 +17,28 @@ const tradesBodyEl = document.getElementById('tradesBody');
 const logTerminalEl = document.getElementById('logTerminal');
 const pulseDot = document.querySelector('.pulse-dot');
 
+const filterStartEl = document.getElementById('filterStart');
+const filterEndEl = document.getElementById('filterEnd');
+const applyFilterBtn = document.getElementById('applyFilterBtn');
+const clearFilterBtn = document.getElementById('clearFilterBtn');
+
 // State
 let lastLogCount = 0;
 
 // Fetch and update status
 async function fetchStatus() {
     try {
-        const res = await fetch(`${API_BASE}/status`);
+        let url = `${API_BASE}/status`;
+        const start = filterStartEl.value;
+        const end = filterEndEl.value;
+        if (start || end) {
+            const params = new URLSearchParams();
+            if (start) params.append('start', start);
+            if (end) params.append('end', end);
+            url += `?${params.toString()}`;
+        }
+        
+        const res = await fetch(url);
         const data = await res.json();
 
         if (data.success) {
@@ -196,6 +211,20 @@ function renderLogs(logs) {
 
 // Initial fetch and interval setup
 async function init() {
+    // Bind buttons
+    if (applyFilterBtn) {
+        applyFilterBtn.addEventListener('click', () => {
+            fetchStatus();
+        });
+    }
+    if (clearFilterBtn) {
+        clearFilterBtn.addEventListener('click', () => {
+            filterStartEl.value = '';
+            filterEndEl.value = '';
+            fetchStatus();
+        });
+    }
+
     await fetchStatus();
     await fetchLogs();
     

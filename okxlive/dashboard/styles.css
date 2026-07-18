@@ -112,6 +112,46 @@ h1 {
     gap: 24px;
 }
 
+/* Controls */
+.date-input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.date-input:focus {
+    border-color: var(--accent-primary);
+}
+.btn {
+    background: rgba(0, 240, 255, 0.1);
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    color: var(--accent-primary);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+.btn:hover {
+    background: rgba(0, 240, 255, 0.2);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+.btn-outline {
+    background: transparent;
+    border-color: var(--glass-border);
+    color: var(--text-muted);
+}
+.btn-outline:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+    box-shadow: none;
+}
+
 /* Metrics */
 .metrics-grid {
     display: grid;

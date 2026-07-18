@@ -30,6 +30,16 @@
             
             <!-- Left Column: Metrics & Positions -->
             <div class="left-col">
+                <!-- Controls -->
+                <div class="controls-panel glass-panel" style="padding: 16px 24px; display: flex; gap: 16px; align-items: center; margin-bottom: -8px;">
+                    <span style="color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Filter:</span>
+                    <input type="date" id="filterStart" class="date-input">
+                    <span style="color: var(--text-muted);">to</span>
+                    <input type="date" id="filterEnd" class="date-input">
+                    <button id="applyFilterBtn" class="btn">Apply</button>
+                    <button id="clearFilterBtn" class="btn btn-outline">Clear</button>
+                </div>
+
                 <!-- Metrics Row -->
                 <div class="metrics-grid">
                     <div class="metric-card glass-panel">
