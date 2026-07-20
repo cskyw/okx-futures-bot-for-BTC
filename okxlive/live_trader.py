@@ -275,16 +275,14 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 (带单员：本地机器人监控触发并挂限价单) ----
+        # ---- TP1 (带单员：本地机器人监控触发并挂市价单) ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
             # 如果还没挂单，则触发挂单
             tp1_placed = entry.get("tp1_placed", False)
             if not tp1_placed:
                 tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-                # 稍微高于当前现价挂限价单（更有利的卖出价）
-                limit_price = price * (1 + 0.0002)
-                logger.info(f"  [LONG TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发限价平半仓指令 {tp_sz}张 at {limit_price:.2f}")
-                ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], price=limit_price, ordType="limit")
+                logger.info(f"  [LONG TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
+                ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
                 if ok:
                     entry["tp1_placed"] = True
                     acted = True
@@ -399,15 +397,13 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 (带单员：本地机器人监控触发并挂限价单) ----
+        # ---- TP1 (带单员：本地机器人监控触发并挂市价单) ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
             tp1_placed = entry.get("tp1_placed", False)
             if not tp1_placed:
                 tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-                # 稍微低于当前现价挂限价单（空头平仓是买入，稍微挂低一点，比如减 0.02%）
-                limit_price = price * (1 - 0.0002)
-                logger.info(f"  [SHORT TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发限价平半仓指令 {tp_sz}张 at {limit_price:.2f}")
-                ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], price=limit_price, ordType="limit")
+                logger.info(f"  [SHORT TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
+                ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
                 if ok:
                     entry["tp1_placed"] = True
                     acted = True
