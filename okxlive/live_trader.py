@@ -307,7 +307,6 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                 })
                 logger.info(f"  [LONG TP1] 检测到交易所已平半仓，标记完成，剩余 {expected_sz}张，止损移至 {ep:.2f}")
                 acted = True
-            continue
 
         # ---- TP2 (动态追踪止损 & 硬性止盈) ----
         if tp1done:
@@ -427,7 +426,6 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                 })
                 logger.info(f"  [SHORT TP1] 检测到交易所已平半仓，标记完成，剩余 {expected_sz}张，止损移至 {ep:.2f}")
                 acted = True
-            continue
 
         # ---- TP2 (动态追踪止损 & 硬性止盈) ----
         if tp1done:
