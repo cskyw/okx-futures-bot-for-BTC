@@ -275,9 +275,21 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 (已改用交易所挂单，本地仅检测是否成交) ----
+        # ---- TP1 (带单员：本地机器人监控触发并挂限价单) ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
-            # 如果 OKX 已经执行了限价平仓，sync_positions 会将张数缩小
+            # 如果还没挂单，则触发挂单
+            tp1_placed = entry.get("tp1_placed", False)
+            if not tp1_placed:
+                tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+                # 稍微高于当前现价挂限价单（更有利的卖出价）
+                limit_price = price * (1 + 0.0002)
+                logger.info(f"  [LONG TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发限价平半仓指令 {tp_sz}张 at {limit_price:.2f}")
+                ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], price=limit_price, ordType="limit")
+                if ok:
+                    entry["tp1_placed"] = True
+                    acted = True
+            
+            # (原逻辑保留)：如果 OKX 已经执行了限价平仓，sync_positions 会将张数缩小
             # 这里我们只负责将 tp1_done 标记为 True，并且移动止损线
             expected_sz = max(0.01, round(CONFIG.get("fixed_open_sz", 0.02) * (1 - CONFIG["tp1_sell_prop"]), 2))
             if sz <= expected_sz + 0.001:
@@ -387,8 +399,20 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 (已改用交易所挂单，本地仅检测是否成交) ----
+        # ---- TP1 (带单员：本地机器人监控触发并挂限价单) ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
+            tp1_placed = entry.get("tp1_placed", False)
+            if not tp1_placed:
+                tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+                # 稍微低于当前现价挂限价单（空头平仓是买入，稍微挂低一点，比如减 0.02%）
+                limit_price = price * (1 - 0.0002)
+                logger.info(f"  [SHORT TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发限价平半仓指令 {tp_sz}张 at {limit_price:.2f}")
+                ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], price=limit_price, ordType="limit")
+                if ok:
+                    entry["tp1_placed"] = True
+                    acted = True
+            
+            # (原逻辑保留)：如果 OKX 已经执行了限价平仓，sync_positions 会将张数缩小
             expected_sz = max(0.01, round(CONFIG.get("fixed_open_sz", 0.02) * (1 - CONFIG["tp1_sell_prop"]), 2))
             if sz <= expected_sz + 0.001:
                 entry["tp1_done"] = True
@@ -567,8 +591,8 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
                 td_mode     = CONFIG["td_mode"],
                 offset      = CONFIG.get("limit_offset", 0.001),
                 sl_pct      = CONFIG.get("sl_pct", 0.05),
-                tp_pct      = CONFIG.get("tp1_pct", 0.03),
-                tp_sz       = tp_sz,
+                # tp_pct      = CONFIG.get("tp1_pct", 0.03), # 带单员限制，交由机器人轮询处理
+                # tp_sz       = tp_sz,
             )
             if ordId:
                 sz     = CONFIG.get("fixed_open_sz", 0.02)
@@ -609,8 +633,8 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
                 td_mode     = CONFIG["td_mode"],
                 offset      = CONFIG.get("limit_offset", 0.001),
                 sl_pct      = CONFIG.get("sl_pct", 0.05),
-                tp_pct      = CONFIG.get("tp1_pct", 0.03),
-                tp_sz       = tp_sz,
+                # tp_pct      = CONFIG.get("tp1_pct", 0.03), # 带单员限制，交由机器人轮询处理
+                # tp_sz       = tp_sz,
             )
             if ordId:
                 sz     = CONFIG.get("fixed_open_sz", 0.02)

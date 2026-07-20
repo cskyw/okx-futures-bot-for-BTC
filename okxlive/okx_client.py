@@ -307,14 +307,15 @@ class OKXClient:
             })
             
         # 2. 附带止盈单 (第一档止盈, 指定张数)
-        if tp_pct and tp_sz:
-            tp_price = round(limit_price * (1 + tp_pct), 1)
-            algo_ords.append({
-                "attachAlgoOrdType": "conditional",
-                "tpTriggerPx": str(tp_price),
-                "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
-                "sz": self._fmt_sz(tp_sz)
-            })
+        # (带单员限制：注释掉开单时的止盈，改为机器人10秒轮询触发)
+        # if tp_pct and tp_sz:
+        #     tp_price = round(limit_price * (1 + tp_pct), 1)
+        #     algo_ords.append({
+        #         "attachAlgoOrdType": "conditional",
+        #         "tpTriggerPx": str(tp_price),
+        #         "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
+        #         "sz": self._fmt_sz(tp_sz)
+        #     })
             
         if algo_ords:
             body["attachAlgoOrds"] = algo_ords
@@ -331,19 +332,23 @@ class OKXClient:
         instId:  str,
         sz:      float,
         td_mode: str = "cross",
+        price:   float = None,
+        ordType: str = "market",
     ) -> bool:
-        """平多：市价单，保证止损时效性"""
+        """平多：支持市价或限价"""
         sz = max(0.01, round(sz, 2))
-        logger.info(f"[平多-市价] sz={sz}张")
+        logger.info(f"[平多] sz={sz}张 ordType={ordType} price={price}")
 
         body = {
             "instId":  instId,
             "tdMode":  td_mode,
             "side":    "sell",
             "posSide": "long",
-            "ordType": "market",
+            "ordType": ordType,
             "sz":      self._fmt_sz(sz),
         }
+        if ordType == "limit" and price is not None:
+            body["px"] = str(round(price, 4))
 
         data = self._post("/api/v5/trade/order", body)
         if data and data["data"]:
@@ -395,14 +400,15 @@ class OKXClient:
             })
             
         # 2. 附带止盈单 (第一档止盈, 指定张数)
-        if tp_pct and tp_sz:
-            tp_price = round(limit_price * (1 - tp_pct), 1)
-            algo_ords.append({
-                "attachAlgoOrdType": "conditional",
-                "tpTriggerPx": str(tp_price),
-                "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
-                "sz": self._fmt_sz(tp_sz)
-            })
+        # (带单员限制：注释掉开单时的止盈，改为机器人10秒轮询触发)
+        # if tp_pct and tp_sz:
+        #     tp_price = round(limit_price * (1 - tp_pct), 1)
+        #     algo_ords.append({
+        #         "attachAlgoOrdType": "conditional",
+        #         "tpTriggerPx": str(tp_price),
+        #         "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
+        #         "sz": self._fmt_sz(tp_sz)
+        #     })
             
         if algo_ords:
             body["attachAlgoOrds"] = algo_ords
@@ -419,19 +425,23 @@ class OKXClient:
         instId:  str,
         sz:      float,
         td_mode: str = "cross",
+        price:   float = None,
+        ordType: str = "market",
     ) -> bool:
-        """平空：市价单，保证止损时效性"""
+        """平空：支持市价或限价"""
         sz = max(0.01, round(sz, 2))
-        logger.info(f"[平空-市价] sz={sz}张")
+        logger.info(f"[平空] sz={sz}张 ordType={ordType} price={price}")
 
         body = {
             "instId":  instId,
             "tdMode":  td_mode,
             "side":    "buy",
             "posSide": "short",
-            "ordType": "market",
+            "ordType": ordType,
             "sz":      self._fmt_sz(sz),
         }
+        if ordType == "limit" and price is not None:
+            body["px"] = str(round(price, 4))
 
         data = self._post("/api/v5/trade/order", body)
         if data and data["data"]:
