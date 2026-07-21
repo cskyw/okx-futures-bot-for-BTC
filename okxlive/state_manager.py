@@ -30,8 +30,8 @@ class StateManager:
         self._history = self._load(self.history_path, [])
 
         if not self._data.get("dashboard_start_time"):
-            from datetime import datetime, timezone
-            self._data["dashboard_start_time"] = datetime.now(timezone.utc).isoformat()
+            from datetime import datetime, timezone, timedelta
+            self._data["dashboard_start_time"] = datetime.now(timezone(timedelta(hours=8))).isoformat()
             self.save()
 
     def _load(self, filepath: str, default: Any) -> Any:

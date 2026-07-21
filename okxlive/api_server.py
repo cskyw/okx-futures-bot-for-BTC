@@ -4,6 +4,7 @@ from flask_cors import CORS
 from okx_client import OKXClient
 from config import CONFIG
 from state_manager import StateManager
+from datetime import datetime, timezone, timedelta
 
 # Use absolute paths so it works reliably on a server regardless of the current working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -47,8 +48,6 @@ def get_status():
 
         # Reload local state to get the latest completed trades count
         state.reload()
-
-        from datetime import datetime, timezone
         
         # Get start and end dates from query args
         start_date_str = request.args.get('start')
@@ -62,9 +61,9 @@ def get_status():
             filtered = []
             try:
                 if start_date_str:
-                    sd = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    sd = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone(timedelta(hours=8)))
                 if end_date_str:
-                    ed = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    ed = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone(timedelta(hours=8)))
             except ValueError:
                 pass
                 
@@ -92,7 +91,7 @@ def get_status():
         # Calculate annualized return
         annualized_return = 0
         try:
-            now_time = datetime.now(timezone.utc)
+            now_time = datetime.now(timezone(timedelta(hours=8)))
             actual_sd = sd
             
             if not actual_sd:

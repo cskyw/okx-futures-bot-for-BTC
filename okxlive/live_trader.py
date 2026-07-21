@@ -10,7 +10,7 @@ import time
 import logging
 import os
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from okx_client import OKXClient
 from strategy_engine import StrategyEngine
@@ -131,15 +131,12 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
             total_state_sz = sum(e["sz"] for e in state_long)
             if abs(total_state_sz - okx_sz) > 0.005:
                 logger.warning(
-                    f"  [多头] state 张数({total_state_sz}) ≠ OKX({okx_sz})，按比例缩放"
+                    f"  [多头] 总张数不一致! state={total_state_sz} OKX={okx_sz}，"
+                    f"请手动核对，本次不做任何调整"
                 )
-                ratio = okx_sz / total_state_sz
-                for e in state_long:
-                    e["sz"] = max(0.01, round(e["sz"] * ratio, 2))
-                state.set("long_entries", state_long)
-                changed = True
             else:
                 logger.debug(f"  [多头] state 与 OKX 一致，无需修改")
+    
         else:
             logger.warning(
                 f"  [多头] OKX 有持仓 {okx_sz}张 均价={okx_avgpx:.2f}，state 为空，自动重建"
@@ -167,7 +164,7 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                 lever = entry.get("lever", CONFIG["lever"])
                 pnl = (price / ep) - 1.0
                 state.add_trade_record({
-                    "time": datetime.now(timezone.utc).isoformat(),
+                    "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                     "direction": "long",
                     "sz": entry["sz"],
                     "entry_price": ep,
@@ -193,15 +190,12 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
             total_state_sz = sum(e["sz"] for e in state_short)
             if abs(total_state_sz - okx_sz) > 0.005:
                 logger.warning(
-                    f"  [空头] state 张数({total_state_sz}) ≠ OKX({okx_sz})，按比例缩放"
+                    f"  [空头] 总张数不一致! state={total_state_sz} OKX={okx_sz}，"
+                    f"请手动核对，本次不做任何调整"
                 )
-                ratio = okx_sz / total_state_sz
-                for e in state_short:
-                    e["sz"] = max(0.01, round(e["sz"] * ratio, 2))
-                state.set("short_entries", state_short)
-                changed = True
             else:
                 logger.debug(f"  [空头] state 与 OKX 一致，无需修改")
+        
         else:
             logger.warning(
                 f"  [空头] OKX 有持仓 {okx_sz}张 均价={okx_avgpx:.2f}，state 为空，自动重建"
@@ -229,7 +223,7 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                 lever = entry.get("lever", CONFIG["lever"])
                 pnl = (ep / price) - 1.0
                 state.add_trade_record({
-                    "time": datetime.now(timezone.utc).isoformat(),
+                    "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                     "direction": "short",
                     "sz": entry["sz"],
                     "entry_price": ep,
@@ -275,28 +269,19 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 (带单员：本地机器人监控触发并挂市价单) ----
+        # ---- TP1：达到涨幅，市价平半仓，立即标记完成 ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
-            # 如果还没挂单，则触发挂单
-            tp1_placed = entry.get("tp1_placed", False)
-            if not tp1_placed:
-                tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-                logger.info(f"  [LONG TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
-                ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
-                if ok:
-                    entry["tp1_placed"] = True
-                    acted = True
-            
-            # (原逻辑保留)：如果 OKX 已经执行了限价平仓，sync_positions 会将张数缩小
-            # 这里我们只负责将 tp1_done 标记为 True，并且移动止损线
-            expected_sz = max(0.01, round(CONFIG.get("fixed_open_sz", 0.02) * (1 - CONFIG["tp1_sell_prop"]), 2))
-            if sz <= expected_sz + 0.001:
+            tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+            logger.info(f"  [LONG TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
+            ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
+            if ok:
+                # 立即更新本地状态：扣减张数、标记完成、移动止损至保本
+                entry["sz"] = round(sz - tp_sz, 2)
                 entry["tp1_done"] = True
-                entry["sl_price"] = ep # 止损移至开仓价 (保本)
-                tp_sz = round(sz - expected_sz, 2)
+                entry["sl_price"] = ep  # 止损移至开仓价（保本）
                 lever = entry.get("lever", CONFIG["lever"])
                 state.add_trade_record({
-                    "time": datetime.now(timezone.utc).isoformat(),
+                    "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                     "direction": "long",
                     "sz": tp_sz,
                     "entry_price": ep,
@@ -305,8 +290,12 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                     "lev_pnl_pct": pnl_pct * lever,
                     "reason": "TP1 Partial"
                 })
-                logger.info(f"  [LONG TP1] 检测到交易所已平半仓，标记完成，剩余 {expected_sz}张，止损移至 {ep:.2f}")
+                logger.info(f"  [LONG TP1] 平仓成功，剩余 {entry['sz']}张，止损移至 {ep:.2f}")
                 acted = True
+            else:
+                logger.error(f"  [LONG TP1] 市价平半仓下单失败，保留 entry 等下次重试")
+                new_entries.append(entry)
+                continue
 
         # ---- TP2 (动态追踪止损 & 硬性止盈) ----
         if tp1done:
@@ -319,7 +308,7 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                 ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                 if ok:
                     state.add_trade_record({
-                        "time": datetime.now(timezone.utc).isoformat(),
+                        "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                         "direction": "long",
                         "sz": sz,
                         "entry_price": ep,
@@ -354,7 +343,7 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float) ->
                     ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                     if ok:
                         state.add_trade_record({
-                            "time": datetime.now(timezone.utc).isoformat(),
+                            "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                             "direction": "long",
                             "sz": sz,
                             "entry_price": ep,
@@ -396,26 +385,19 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
-        # ---- TP1 (带单员：本地机器人监控触发并挂市价单) ----
+        # ---- TP1：达到涨幅，市价平半仓，立即标记完成 ----
         if not tp1done and pnl_pct >= CONFIG["tp1_pct"]:
-            tp1_placed = entry.get("tp1_placed", False)
-            if not tp1_placed:
-                tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-                logger.info(f"  [SHORT TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
-                ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
-                if ok:
-                    entry["tp1_placed"] = True
-                    acted = True
-            
-            # (原逻辑保留)：如果 OKX 已经执行了限价平仓，sync_positions 会将张数缩小
-            expected_sz = max(0.01, round(CONFIG.get("fixed_open_sz", 0.02) * (1 - CONFIG["tp1_sell_prop"]), 2))
-            if sz <= expected_sz + 0.001:
+            tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+            logger.info(f"  [SHORT TP1] 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
+            ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
+            if ok:
+                # 立即更新本地状态：扣减张数、标记完成、移动止损至保本
+                entry["sz"] = round(sz - tp_sz, 2)
                 entry["tp1_done"] = True
-                entry["sl_price"] = ep # 止损移至开仓价 (保本)
-                tp_sz = round(sz - expected_sz, 2)
+                entry["sl_price"] = ep  # 止损移至开仓价（保本）
                 lever = entry.get("lever", CONFIG["lever"])
                 state.add_trade_record({
-                    "time": datetime.now(timezone.utc).isoformat(),
+                    "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                     "direction": "short",
                     "sz": tp_sz,
                     "entry_price": ep,
@@ -424,8 +406,12 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                     "lev_pnl_pct": pnl_pct * lever,
                     "reason": "TP1 Partial"
                 })
-                logger.info(f"  [SHORT TP1] 检测到交易所已平半仓，标记完成，剩余 {expected_sz}张，止损移至 {ep:.2f}")
+                logger.info(f"  [SHORT TP1] 平仓成功，剩余 {entry['sz']}张，止损移至 {ep:.2f}")
                 acted = True
+            else:
+                logger.error(f"  [SHORT TP1] 市价平半仓下单失败，保留 entry 等下次重试")
+                new_entries.append(entry)
+                continue
 
         # ---- TP2 (动态追踪止损 & 硬性止盈) ----
         if tp1done:
@@ -438,7 +424,7 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                 ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                 if ok:
                     state.add_trade_record({
-                        "time": datetime.now(timezone.utc).isoformat(),
+                        "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                         "direction": "short",
                         "sz": sz,
                         "entry_price": ep,
@@ -473,7 +459,7 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float) -
                     ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                     if ok:
                         state.add_trade_record({
-                            "time": datetime.now(timezone.utc).isoformat(),
+                            "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                             "direction": "short",
                             "sz": sz,
                             "entry_price": ep,
@@ -595,7 +581,7 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
                     "ordId":     ordId,
                     "direction": "long",
                     "sz":        sz,
-                    "open_time": datetime.now(timezone.utc).isoformat(),
+                    "open_time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                     "margin":    margin,
                     "lever":     lever,
                 })
@@ -637,7 +623,7 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
                     "ordId":     ordId,
                     "direction": "short",
                     "sz":        sz,
-                    "open_time": datetime.now(timezone.utc).isoformat(),
+                    "open_time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                     "margin":    margin,
                     "lever":     lever,
                 })
