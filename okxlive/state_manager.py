@@ -41,7 +41,10 @@ class StateManager:
                     data = json.load(f)
                 return data
             except Exception as e:
-                logger.warning(f"状态文件读取失败，使用默认值: {e}")
+                logger.error(f"严重错误: 状态文件 {filepath} 读取失败 (格式错误)! 错误详情: {e}")
+                logger.error("为防止误操作，程序即将终止。请手动修复 JSON 文件格式后再启动程序。")
+                import sys
+                sys.exit(1)
         return default
 
     def reload(self):
