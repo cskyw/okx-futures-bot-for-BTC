@@ -102,7 +102,7 @@ def get_status():
             if actual_sd:
                 actual_ed = min(ed, now_time) if ed else now_time
                 days_elapsed = (actual_ed - actual_sd).total_seconds() / 86400.0
-                days_elapsed = max(days_elapsed, 1.0 / 24.0) # Assume at least 1 hour has passed
+                days_elapsed = max(days_elapsed, 1.0) # Assume at least 1 day has passed to prevent inflated returns
                 annualized_return = (cumulative_pnl_pct / days_elapsed) * 365
         except Exception:
             pass
