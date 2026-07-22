@@ -301,21 +301,19 @@ class OKXClient:
         if sl_pct:
             sl_price = round(limit_price * (1 - sl_pct), 1)
             algo_ords.append({
-                "attachAlgoOrdType": "conditional",
+                "attachAlgoOrdType": "sl",
                 "slTriggerPx": str(sl_price),
                 "slOrdPx": "-1"
             })
             
-        # 2. 附带止盈单 (第一档止盈, 指定张数)
-        # (带单员限制：注释掉开单时的止盈，改为机器人10秒轮询触发)
-        # if tp_pct and tp_sz:
-        #     tp_price = round(limit_price * (1 + tp_pct), 1)
-        #     algo_ords.append({
-        #         "attachAlgoOrdType": "conditional",
-        #         "tpTriggerPx": str(tp_price),
-        #         "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
-        #         "sz": self._fmt_sz(tp_sz)
-        #     })
+        if tp_pct and tp_sz:
+            tp_price = round(limit_price * (1 + tp_pct), 1)
+            algo_ords.append({
+                "attachAlgoOrdType": "tp",
+                "tpTriggerPx": str(tp_price),
+                "tpOrdPx": "-1",
+                "sz": self._fmt_sz(tp_sz)
+            })
             
         if algo_ords:
             body["attachAlgoOrds"] = algo_ords
@@ -394,21 +392,19 @@ class OKXClient:
         if sl_pct:
             sl_price = round(limit_price * (1 + sl_pct), 1)
             algo_ords.append({
-                "attachAlgoOrdType": "conditional",
+                "attachAlgoOrdType": "sl",
                 "slTriggerPx": str(sl_price),
                 "slOrdPx": "-1"
             })
             
-        # 2. 附带止盈单 (第一档止盈, 指定张数)
-        # (带单员限制：注释掉开单时的止盈，改为机器人10秒轮询触发)
-        # if tp_pct and tp_sz:
-        #     tp_price = round(limit_price * (1 - tp_pct), 1)
-        #     algo_ords.append({
-        #         "attachAlgoOrdType": "conditional",
-        #         "tpTriggerPx": str(tp_price),
-        #         "tpOrdPx": "-1", # 必须市价 (OKX限制分批止盈必须为市价)
-        #         "sz": self._fmt_sz(tp_sz)
-        #     })
+        if tp_pct and tp_sz:
+            tp_price = round(limit_price * (1 - tp_pct), 1)
+            algo_ords.append({
+                "attachAlgoOrdType": "tp",
+                "tpTriggerPx": str(tp_price),
+                "tpOrdPx": "-1",
+                "sz": self._fmt_sz(tp_sz)
+            })
             
         if algo_ords:
             body["attachAlgoOrds"] = algo_ords

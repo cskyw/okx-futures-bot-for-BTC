@@ -1,146 +1,23 @@
 {
   "long_entries": [
     {
-      "price": 63409.4,
-      "sz": 0.01,
-      "tp1_done": true,
-      "sl_price": 63409.4,
+      "price": 65945.4,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 62648.12999999999,
       "direction": "long",
-      "open_time": "2026-07-06T15:59:55.812738+00:00",
-      "margin": 2.538916,
-      "lever": 5
-    },
-    {
-      "price": 63481.6,
-      "sz": 0.01,
-      "tp1_done": true,
-      "sl_price": 63481.6,
-      "direction": "long",
-      "open_time": "2026-07-07T14:59:55.919638+00:00",
-      "margin": 2.541808,
-      "lever": 5
-    },
-    {
-      "price": 62934.3,
-      "sz": 0.01,
-      "tp1_done": true,
-      "sl_price": 62934.3,
-      "direction": "long",
-      "open_time": "2026-07-09T13:59:55.801295+00:00",
-      "margin": 2.519892,
+      "open_time": "2026-07-22T23:59:53.691790+08:00",
+      "margin": 2.64046,
       "lever": 5,
-      "tp2_active": true,
-      "max_pnl_pct": 0.2132461948412867
-    },
-    {
-      "price": 63047.7,
-      "sz": 0.01,
-      "tp1_done": true,
-      "sl_price": 63047.7,
-      "direction": "long",
-      "open_time": "2026-07-09T17:59:55.843969+00:00",
-      "margin": 2.524436,
-      "lever": 5,
-      "tp2_active": true,
-      "max_pnl_pct": 0.20386945122502498
-    },
-    {
-      "price": 63657.9,
-      "sz": 0.01,
-      "tp1_done": true,
-      "sl_price": 63657.9,
-      "direction": "long",
-      "open_time": "recovered_from_bug",
-      "margin": 2.546316,
-      "lever": 5
-    },
-    {
-      "price": 64231.9,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 61020.305,
-      "direction": "long",
-      "open_time": "2026-07-11T17:59:55.620815+00:00",
-      "margin": 2.571848,
-      "lever": 5
-    },
-    {
-      "price": 63885.1,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 60690.844999999994,
-      "direction": "long",
-      "open_time": "2026-07-12T08:59:55.810398+00:00",
-      "margin": 2.557964,
-      "lever": 5
-    },
-    {
-      "price": 63923.5,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 60727.325,
-      "direction": "long",
-      "open_time": "2026-07-12T11:59:55.680902+00:00",
-      "margin": 2.5595000000000003,
-      "lever": 5
-    },
-    {
-      "price": 64701.9,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 61466.805,
-      "direction": "long",
-      "open_time": "2026-07-15T03:59:55.298290+00:00",
-      "margin": 2.590668,
-      "lever": 5
-    },
-    {
-      "price": 64677.0,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 61443.149999999994,
-      "direction": "long",
-      "open_time": "2026-07-15T08:59:55.592002+00:00",
-      "margin": 2.589672,
-      "lever": 5
-    },
-    {
-      "price": 64642.9,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 61410.755,
-      "direction": "long",
-      "open_time": "2026-07-15T11:59:55.330329+00:00",
-      "margin": 2.588308,
-      "lever": 5
-    },
-    {
-      "price": 64821.4,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 61580.33,
-      "direction": "long",
-      "open_time": "2026-07-16T05:59:56.111975+00:00",
-      "margin": 2.5954520000000003,
-      "lever": 5
-    },
-    {
-      "price": 64278.2,
-      "sz": 0.02,
-      "tp1_done": false,
-      "sl_price": 61064.28999999999,
-      "direction": "long",
-      "open_time": "2026-07-16T13:59:55.733304+00:00",
-      "margin": 2.573704,
-      "lever": 5
+      "attached_tp1": true
     }
   ],
   "short_entries": [],
-  "completed_long_trades": 11,
-  "completed_short_trades": 26,
+  "completed_long_trades": 1,
+  "completed_short_trades": 0,
   "leverage_set": true,
+  "dashboard_start_time": "2026-07-21T19:45:38.771758+08:00",
   "synced_this_run": false,
-  "pending_orders": [],
   "last_entry_check_hour": 15,
-  "dashboard_start_time": "2026-07-20T00:47:14.221627+00:00"
+  "pending_orders": []
 }
