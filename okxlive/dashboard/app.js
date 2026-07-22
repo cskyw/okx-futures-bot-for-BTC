@@ -62,7 +62,7 @@ async function fetchStatus() {
 // Fetch and update logs
 async function fetchLogs() {
     try {
-        const res = await fetch(`${API_BASE}/logs?lines=100`);
+        const res = await fetch(`${API_BASE}/logs?lines=70`);
         const data = await res.json();
 
         if (data.success) {

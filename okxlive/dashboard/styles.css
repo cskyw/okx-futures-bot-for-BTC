@@ -248,6 +248,7 @@ tbody tr:hover {
     flex-direction: column;
     overflow: hidden;
     font-family: 'JetBrains Mono', monospace;
+    max-height: 600px;
 }
 .terminal-header {
     padding: 16px 24px;
