@@ -859,9 +859,9 @@ def main():
             # 1. 10秒高频任务：价格更新与追踪止损
             run_high_freq_tasks(client, state)
             
-            # 2. 小时级任务：只在每小时的 59分50秒 之后执行一次
+            # 2. 小时级任务：每小时最后15秒内执行一次（59:45-59:59）
             last_hour = state.get("last_entry_check_hour", -1)
-            if now.minute == 59 and now.second >= 50 and last_hour != now.hour:
+            if now.minute == 59 and now.second >= 45 and last_hour != now.hour:
                 run_hourly_tasks(client, state, engine)
                 state.set("last_entry_check_hour", now.hour)
                 state.save()
