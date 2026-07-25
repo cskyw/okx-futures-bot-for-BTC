@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -72,8 +73,14 @@
                     </div>
                 </div>
 
+                <!-- Equity Curve Chart -->
+                <div class="equity-chart-panel glass-panel" style="margin-top: 24px; padding: 24px;">
+                    <h2 style="font-size: 1.2rem; color: var(--accent-primary); margin-bottom: 16px;">Real-time Equity Curve</h2>
+                    <div id="equityChart" style="height: 350px; width: 100%;"></div>
+                </div>
+
                 <!-- Positions -->
-                <div class="positions-panel glass-panel">
+                <div class="positions-panel glass-panel" style="margin-top: 24px;">
                     <h2>Live Positions (Real-time from OKX)</h2>
                     <div class="table-container">
                         <table>

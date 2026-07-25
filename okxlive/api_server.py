@@ -114,6 +114,17 @@ def get_status():
                 annualized_return = (cumulative_pnl_pct / days_elapsed) * 365
         except Exception:
             pass
+            
+        # Downsample equity history to a maximum of 2000 points for frontend performance
+        equity_history = state.get("equity_history", [])
+        max_points = 2000
+        if len(equity_history) > max_points:
+            step = len(equity_history) / max_points
+            downsampled = [equity_history[int(i * step)] for i in range(max_points)]
+            # Ensure the very latest recorded point is always included
+            if downsampled[-1] != equity_history[-1]:
+                downsampled.append(equity_history[-1])
+            equity_history = downsampled
 
         return jsonify({
             "success": True,
@@ -132,7 +143,8 @@ def get_status():
                     "cumulative_pnl_pct": cumulative_pnl_pct,
                     "annualized_return": annualized_return
                 },
-                "trade_history": trade_history[:50] # Send last 50 for UI
+                "trade_history": trade_history[:50], # Send last 50 for UI
+                "equity_history": equity_history
             }
         })
     except Exception as e:

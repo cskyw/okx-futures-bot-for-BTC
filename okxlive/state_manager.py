@@ -80,3 +80,11 @@ class StateManager:
         self._history.insert(0, record)
         if len(self._history) > max_records:
             self._history = self._history[:max_records]
+
+    def add_equity_record(self, record: dict, max_records: int = 50000):
+        """记录净值曲线，尾部追加保证按时间递增，限制最大长度"""
+        equity_history = self.get("equity_history", [])
+        equity_history.append(record)
+        if len(equity_history) > max_records:
+            equity_history = equity_history[-max_records:]
+        self.set("equity_history", equity_history)

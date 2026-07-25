@@ -24,6 +24,8 @@ const clearFilterBtn = document.getElementById('clearFilterBtn');
 
 // State
 let lastLogCount = 0;
+let equityChart = null;
+let equitySeries = null;
 
 // Fetch and update status
 async function fetchStatus() {
@@ -45,6 +47,10 @@ async function fetchStatus() {
             updateMetrics(data.data);
             updatePositions(data.data.positions);
             if (data.data.trade_history) updateTrades(data.data.trade_history);
+            
+            const liveEq = data.data.account ? data.data.account.totalEq : 0;
+            if (data.data.equity_history) updateEquityChart(data.data.equity_history, liveEq);
+            
             pulseDot.style.backgroundColor = 'var(--long-color)';
             pulseDot.style.boxShadow = '0 0 10px var(--long-color)';
         } else {
@@ -75,8 +81,13 @@ async function fetchLogs() {
 
 function updateMetrics(data) {
     // Account
-    totalEqEl.textContent = `${parseFloat(data.account.totalEq).toFixed(2)} USDT`;
-    availBalEl.textContent = `${parseFloat(data.account.availBal).toFixed(2)} USDT`;
+    if (data.account) {
+        totalEqEl.textContent = `${parseFloat(data.account.totalEq || 0).toFixed(2)} USDT`;
+        availBalEl.textContent = `${parseFloat(data.account.availBal || 0).toFixed(2)} USDT`;
+    } else {
+        totalEqEl.textContent = `-- USDT`;
+        availBalEl.textContent = `-- USDT`;
+    }
     
     // Price
     if (data.current_price) {
@@ -209,8 +220,78 @@ function renderLogs(logs) {
     logTerminalEl.scrollTop = logTerminalEl.scrollHeight;
 }
 
+function initChart() {
+    try {
+        if (typeof LightweightCharts === 'undefined') {
+            console.warn("LightweightCharts library failed to load from CDN.");
+            return;
+        }
+        const chartContainer = document.getElementById('equityChart');
+        if (!chartContainer) return;
+    
+    equityChart = LightweightCharts.createChart(chartContainer, {
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#8892b0',
+        },
+        grid: {
+            vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
+            horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
+        },
+        timeScale: {
+            timeVisible: true,
+            secondsVisible: false,
+        },
+    });
+
+    equitySeries = equityChart.addAreaSeries({
+        lineColor: '#00e676',
+        topColor: 'rgba(0, 230, 118, 0.4)',
+        bottomColor: 'rgba(0, 230, 118, 0.0)',
+        lineWidth: 2,
+    });
+    
+    window.addEventListener('resize', () => {
+        if (equityChart && chartContainer) {
+            equityChart.resize(chartContainer.clientWidth, 350);
+        }
+    });
+    } catch (e) {
+        console.error("Failed to initialize chart:", e);
+    }
+}
+
+function updateEquityChart(history, liveEq) {
+    if (!equitySeries) return;
+    
+    const chartData = [];
+    history.forEach(item => {
+        chartData.push({
+            // LightweightCharts defaults to UTC. Add 8 hours (28800s) to force Beijing Time display
+            time: Math.floor(new Date(item.time).getTime() / 1000) + 28800,
+            value: parseFloat(item.equity)
+        });
+    });
+    
+    // Add current live tick
+    const now = Math.floor(Date.now() / 1000) + 28800;
+    // If the last history point is exactly now or slightly ahead (time sync issue), don't add duplicate time
+    if (chartData.length === 0 || now > chartData[chartData.length - 1].time) {
+        chartData.push({
+            time: now,
+            value: parseFloat(liveEq)
+        });
+    } else if (chartData.length > 0) {
+        chartData[chartData.length - 1].value = parseFloat(liveEq);
+    }
+    
+    equitySeries.setData(chartData);
+    equityChart.timeScale().fitContent();
+}
+
 // Initial fetch and interval setup
 async function init() {
+    initChart();
     // Bind buttons
     if (applyFilterBtn) {
         applyFilterBtn.addEventListener('click', () => {
