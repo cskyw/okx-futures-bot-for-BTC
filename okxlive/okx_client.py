@@ -240,23 +240,7 @@ class OKXClient:
         }
 
     # ==================== 下单（合约双向持仓）====================
-    def _contracts_from_usdt(self, usdt_amount: float, price: float, ct_val: float, lever: int) -> float:
-        """
-        根据 USDT 保证金计算合约张数
-        公式：张数 = (USDT保证金 × 杠杆) / (合约面值 × 价格)
-        最小下单单位 0.02 张
-        """
-        if price <= 0 or ct_val <= 0:
-            return 0.0
-        
-        # ---- 原动态算仓位逻辑 ----
-        # raw = (usdt_amount * lever) / (ct_val * price)
-        # sz = math.floor(raw * 100) / 100
-        # sz = max(0.02, sz)
-        # return sz
 
-        # 固定每次开仓张数
-        return _CONFIG.get("fixed_open_sz", 0.02)
 
     @staticmethod
     def _fmt_sz(sz: float) -> str:
@@ -266,7 +250,7 @@ class OKXClient:
     def open_long(
         self,
         instId:      str,
-        usdt_margin: float,
+        sz:          float,
         price:       float,
         ct_val:      float,
         lever:       int,
@@ -277,13 +261,12 @@ class OKXClient:
         tp_sz:       float = None,
     ) -> Optional[str]:
         """
-        开多：限价挂单，低于当前价 offset 处挂单
+        开多：限价挂单，低于当前价 offset 处挂单（全仓模式，固定张数）
         返回 ordId（成功）或 None（失败）
         """
-        sz          = self._contracts_from_usdt(usdt_margin, price, ct_val, lever)
         limit_price = round(price * (1 - offset), 4)
 
-        logger.info(f"[开多-限价] 保证金={usdt_margin:.2f}U 当前价={price:.2f} 限价={limit_price:.2f} → {sz}张")
+        logger.info(f"[开多-限价] 固定张数={sz}张 当前价={price:.2f} 限价={limit_price:.2f}")
 
         body = {
             "instId":  instId,
@@ -357,7 +340,7 @@ class OKXClient:
     def open_short(
         self,
         instId:      str,
-        usdt_margin: float,
+        sz:          float,
         price:       float,
         ct_val:      float,
         lever:       int,
@@ -368,13 +351,12 @@ class OKXClient:
         tp_sz:       float = None,
     ) -> Optional[str]:
         """
-        开空：限价挂单，高于当前价 offset 处挂单
+        开空：限价挂单，高于当前价 offset 处挂单（全仓模式，固定张数）
         返回 ordId（成功）或 None（失败）
         """
-        sz          = self._contracts_from_usdt(usdt_margin, price, ct_val, lever)
         limit_price = round(price * (1 + offset), 4)
 
-        logger.info(f"[开空-限价] 保证金={usdt_margin:.2f}U 当前价={price:.2f} 限价={limit_price:.2f} → {sz}张")
+        logger.info(f"[开空-限价] 固定张数={sz}张 当前价={price:.2f} 限价={limit_price:.2f}")
 
         body = {
             "instId":  instId,

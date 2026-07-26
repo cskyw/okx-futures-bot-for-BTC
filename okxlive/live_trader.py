@@ -74,7 +74,6 @@ def process_pending_orders(client: OKXClient, state: StateManager):
                 "sl_price":     sl_price,
                 "direction":    direction,
                 "open_time":    p["open_time"],
-                "margin":       p["margin"],
                 "lever":        p["lever"],
                 "attached_tp1": True,
             }
@@ -178,7 +177,6 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                     "sl_price":  sl_price,
                     "direction": "long",
                     "open_time": "recovered",
-                    "margin":    0,
                     "lever":     okx_long["lever"],
                     "recovered": True,
                     "attached_tp1": False,
@@ -266,7 +264,6 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                     "sl_price":  sl_price,
                     "direction": "short",
                     "open_time": "recovered",
-                    "margin":    0,
                     "lever":     okx_short["lever"],
                     "recovered": True,
                     "attached_tp1": False,
@@ -679,87 +676,71 @@ def run_hourly_tasks(client: OKXClient, state: StateManager, engine: StrategyEng
 
     # 做多信号
     if cross5 > 0 and cross10 > 0 and price > ma120:
-        sz       = CONFIG.get("fixed_open_sz", 0.02)
-        lever    = CONFIG["lever"]
-        notional = sz * CONFIG["ct_val"] * price
-        margin   = notional / lever
+        sz    = CONFIG.get("fixed_open_sz", 0.02)
+        lever = CONFIG["lever"]
         logger.info(
-            f"[SIGNAL LONG] price={price:.2f} 所需保证金={margin:.2f}U "
-            f"({lever}x) 名义={notional:.2f}U 固定开仓={sz}张"
+            f"[SIGNAL LONG] price={price:.2f} 固定张数={sz}张 ({lever}x)"
         )
 
-        if avail_bal >= margin:
-            tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-            ordId = client.open_long(
-                instId      = CONFIG["inst_id"],
-                usdt_margin = margin,
-                price       = price,
-                ct_val      = CONFIG["ct_val"],
-                lever       = lever,
-                td_mode     = CONFIG["td_mode"],
-                offset      = CONFIG.get("limit_offset", 0.001),
-                sl_pct      = CONFIG.get("sl_pct", 0.05),
-                tp_pct      = CONFIG.get("tp1_pct", 0.03),
-                tp_sz       = tp_sz,
-            )
-            if ordId:
-                sz     = CONFIG.get("fixed_open_sz", 0.02)
-                pending = state.get("pending_orders", [])
-                pending.append({
-                    "ordId":     ordId,
-                    "direction": "long",
-                    "sz":        sz,
-                    "open_time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                    "margin":    margin,
-                    "lever":     lever,
-                })
-                state.set("pending_orders", pending)
-                state.save()
-                logger.info(f"[LONG 挂单记录] ordId={ordId} sz≈{sz}张，等待成交确认")
-        else:
-            logger.warning(f"可用保证金不足: avail={avail_bal:.2f} need={margin:.2f}")
+        tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+        ordId = client.open_long(
+            instId      = CONFIG["inst_id"],
+            sz          = sz,
+            price       = price,
+            ct_val      = CONFIG["ct_val"],
+            lever       = lever,
+            td_mode     = CONFIG["td_mode"],
+            offset      = CONFIG.get("limit_offset", 0.001),
+            sl_pct      = CONFIG.get("sl_pct", 0.05),
+            tp_pct      = CONFIG.get("tp1_pct", 0.03),
+            tp_sz       = tp_sz,
+        )
+        if ordId:
+            pending = state.get("pending_orders", [])
+            pending.append({
+                "ordId":     ordId,
+                "direction": "long",
+                "sz":        sz,
+                "open_time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                "lever":     lever,
+            })
+            state.set("pending_orders", pending)
+            state.save()
+            logger.info(f"[LONG 挂单记录] ordId={ordId} sz={sz}张，等待成交确认")
 
     # 做空信号
     elif cross5 < 0 and cross10 < 0 and price < ma120:
-        sz       = CONFIG.get("fixed_open_sz", 0.02)
-        lever    = CONFIG["lever"]
-        notional = sz * CONFIG["ct_val"] * price
-        margin   = notional / lever
+        sz    = CONFIG.get("fixed_open_sz", 0.02)
+        lever = CONFIG["lever"]
         logger.info(
-            f"[SIGNAL SHORT] price={price:.2f} 所需保证金={margin:.2f}U "
-            f"({lever}x) 名义={notional:.2f}U 固定开仓={sz}张"
+            f"[SIGNAL SHORT] price={price:.2f} 固定张数={sz}张 ({lever}x)"
         )
 
-        if avail_bal >= margin:
-            tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-            ordId = client.open_short(
-                instId      = CONFIG["inst_id"],
-                usdt_margin = margin,
-                price       = price,
-                ct_val      = CONFIG["ct_val"],
-                lever       = lever,
-                td_mode     = CONFIG["td_mode"],
-                offset      = CONFIG.get("limit_offset", 0.001),
-                sl_pct      = CONFIG.get("sl_pct", 0.05),
-                tp_pct      = CONFIG.get("tp1_pct", 0.03),
-                tp_sz       = tp_sz,
-            )
-            if ordId:
-                sz     = CONFIG.get("fixed_open_sz", 0.02)
-                pending = state.get("pending_orders", [])
-                pending.append({
-                    "ordId":     ordId,
-                    "direction": "short",
-                    "sz":        sz,
-                    "open_time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                    "margin":    margin,
-                    "lever":     lever,
-                })
-                state.set("pending_orders", pending)
-                state.save()
-                logger.info(f"[SHORT 挂单记录] ordId={ordId} sz≈{sz}张，等待成交确认")
-        else:
-            logger.warning(f"可用保证金不足: avail={avail_bal:.2f} need={margin:.2f}")
+        tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+        ordId = client.open_short(
+            instId      = CONFIG["inst_id"],
+            sz          = sz,
+            price       = price,
+            ct_val      = CONFIG["ct_val"],
+            lever       = lever,
+            td_mode     = CONFIG["td_mode"],
+            offset      = CONFIG.get("limit_offset", 0.001),
+            sl_pct      = CONFIG.get("sl_pct", 0.05),
+            tp_pct      = CONFIG.get("tp1_pct", 0.03),
+            tp_sz       = tp_sz,
+        )
+        if ordId:
+            pending = state.get("pending_orders", [])
+            pending.append({
+                "ordId":     ordId,
+                "direction": "short",
+                "sz":        sz,
+                "open_time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                "lever":     lever,
+            })
+            state.set("pending_orders", pending)
+            state.save()
+            logger.info(f"[SHORT 挂单记录] ordId={ordId} sz={sz}张，等待成交确认")
 
     else:
         logger.info("无开仓信号")
