@@ -12,12 +12,24 @@
       "attached_tp1": true
     }
   ],
-  "short_entries": [],
+  "short_entries": [
+    {
+      "price": 64056.8,
+      "sz": 0.02,
+      "tp1_done": false,
+      "sl_price": 67259.64,
+      "direction": "short",
+      "open_time": "2026-07-25T13:59:52.737992+08:00",
+      "margin": 2.559712,
+      "lever": 5,
+      "attached_tp1": true
+    }
+  ],
   "completed_long_trades": 1,
   "completed_short_trades": 0,
   "leverage_set": true,
   "dashboard_start_time": "2026-07-21T19:45:38.771758+08:00",
   "synced_this_run": false,
-  "last_entry_check_hour": 15,
+  "last_entry_check_hour": 3,
   "pending_orders": []
 }

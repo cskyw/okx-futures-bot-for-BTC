@@ -25,9 +25,11 @@ class StateManager:
     def __init__(self, path: str = "state/trader_state.json"):
         self.path = path
         self.history_path = path.replace("trader_state.json", "trade_history.json")
+        self.equity_path = path.replace("trader_state.json", "equity_history.json")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         self._data = self._load(self.path, dict(DEFAULT_STATE))
         self._history = self._load(self.history_path, [])
+        self._equity = self._load(self.equity_path, {"equity_history": [], "last_equity_time": 0})
 
         if not self._data.get("dashboard_start_time"):
             from datetime import datetime, timezone, timedelta
@@ -50,6 +52,7 @@ class StateManager:
     def reload(self):
         self._data = self._load(self.path, dict(DEFAULT_STATE))
         self._history = self._load(self.history_path, [])
+        self._equity = self._load(self.equity_path, {"equity_history": [], "last_equity_time": 0})
 
     def save(self):
         try:
@@ -57,6 +60,8 @@ class StateManager:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
             with open(self.history_path, "w", encoding="utf-8") as f:
                 json.dump(self._history, f, ensure_ascii=False, indent=2)
+            with open(self.equity_path, "w", encoding="utf-8") as f:
+                json.dump(self._equity, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"状态保存失败: {e}")
 
@@ -81,10 +86,19 @@ class StateManager:
         if len(self._history) > max_records:
             self._history = self._history[:max_records]
 
+    def get_equity_data(self) -> dict:
+        return self._equity
+
     def add_equity_record(self, record: dict, max_records: int = 50000):
         """记录净值曲线，尾部追加保证按时间递增，限制最大长度"""
-        equity_history = self.get("equity_history", [])
+        equity_history = self._equity.get("equity_history", [])
         equity_history.append(record)
         if len(equity_history) > max_records:
             equity_history = equity_history[-max_records:]
-        self.set("equity_history", equity_history)
+        self._equity["equity_history"] = equity_history
+
+    def get_last_equity_time(self) -> float:
+        return self._equity.get("last_equity_time", 0)
+
+    def set_last_equity_time(self, ts: float):
+        self._equity["last_equity_time"] = ts

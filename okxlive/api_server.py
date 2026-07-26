@@ -116,7 +116,8 @@ def get_status():
             pass
             
         # Downsample equity history to a maximum of 2000 points for frontend performance
-        equity_history = state.get("equity_history", [])
+        equity_data = state.get_equity_data()
+        equity_history = equity_data.get("equity_history", [])
         max_points = 2000
         if len(equity_history) > max_points:
             step = len(equity_history) / max_points

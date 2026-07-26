@@ -5,6 +5,8 @@ config.py
 交易模式：OKX 永续合约 (BTC-USDT-SWAP)，全仓模式，5 倍杠杆
 合约规格：BTC-USDT-SWAP 每张 = 0.01 BTC
 """
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG = {
     # ====== OKX API 配置 ======
@@ -37,8 +39,8 @@ CONFIG = {
     "tp1_sell_prop": 0.5,      # TP1 平掉该仓位的 50% (半仓)
 
     # ====== 文件路径 ======
-    "state_file": "state/trader_state.json",
-    "log_dir":    "logs",
+    "state_file": os.path.join(BASE_DIR, "state", "trader_state.json"),
+    "log_dir":    os.path.join(BASE_DIR, "logs"),
 }
 
 # ====== 杠杆与止损说明 ======

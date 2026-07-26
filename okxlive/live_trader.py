@@ -866,17 +866,17 @@ def main():
                 state.set("last_entry_check_hour", now.hour)
                 state.save()
                 
-            # 3. 每 10 分钟记录一次账户净值（用于面板的净值曲线）
-            last_equity_time = state.get("last_equity_time", 0)
+            # 3. 每 12 小时记录一次账户净值（用于面板的净值曲线）
+            last_equity_time = state.get_last_equity_time()
             now_ts = now.timestamp()
-            if now_ts - last_equity_time >= 600:
+            if now_ts - last_equity_time >= 43200:
                 acc_info = client.get_account_balance(ccy=CONFIG["quote_ccy"])
                 if acc_info and "totalEq" in acc_info:
                     state.add_equity_record({
                         "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                         "equity": float(acc_info["totalEq"])
                     })
-                    state.set("last_equity_time", now_ts)
+                    state.set_last_equity_time(now_ts)
                     state.save()
                 
         except KeyboardInterrupt:
