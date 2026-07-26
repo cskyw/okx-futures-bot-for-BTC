@@ -37,6 +37,7 @@ CONFIG = {
     "tp2_trail_pct": 0.05,     # TP2 追踪回撤 5%
     "sl_pct":        0.05,     # 止损 5%（5倍杠杆下实际亏损约25%保证金，请勿随意调大）
     "tp1_sell_prop": 0.5,      # TP1 平掉该仓位的 50% (半仓)
+    "limit_offset":  0.0002,   # 挂单限价偏移量 (0.0002 = 0.02%)，数值越小越容易成交，但也越容易变成吃单(Taker)
 
     # ====== 文件路径 ======
     "state_file": os.path.join(BASE_DIR, "state", "trader_state.json"),
