@@ -314,3 +314,28 @@ tbody tr:hover {
         grid-template-columns: 1fr;
     }
 }
+
+/* Chart range selector buttons */
+.chart-range-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.5px;
+    font-family: 'Outfit', sans-serif;
+}
+.chart-range-btn:hover {
+    background: rgba(0, 230, 118, 0.1);
+    border-color: rgba(0, 230, 118, 0.3);
+    color: var(--accent-primary);
+}
+.chart-range-btn.active {
+    background: rgba(0, 230, 118, 0.15);
+    border-color: rgba(0, 230, 118, 0.5);
+    color: var(--accent-primary);
+}

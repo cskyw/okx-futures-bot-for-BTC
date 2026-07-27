@@ -24,8 +24,10 @@ const clearFilterBtn = document.getElementById('clearFilterBtn');
 
 // State
 let lastLogCount = 0;
-let equityChart = null;
-let equitySeries = null;
+let equityChart = null;  // Chart.js instance
+let chartRangeDays = 0;  // 0 = ALL, 7 = 7D, 30 = 30D, 90 = 90D
+let allEquityHistory = [];  // full cache of raw history from API
+let lastLiveEq = 0;
 
 // Fetch and update status
 async function fetchStatus() {
@@ -49,7 +51,11 @@ async function fetchStatus() {
             if (data.data.trade_history) updateTrades(data.data.trade_history);
             
             const liveEq = data.data.account ? data.data.account.totalEq : 0;
-            if (data.data.equity_history) updateEquityChart(data.data.equity_history, liveEq);
+            if (data.data.equity_history) {
+                allEquityHistory = data.data.equity_history;  // cache full data
+                lastLiveEq = liveEq;
+                renderEquityChart();
+            }
             
             pulseDot.style.backgroundColor = 'var(--long-color)';
             pulseDot.style.boxShadow = '0 0 10px var(--long-color)';
@@ -221,78 +227,113 @@ function renderLogs(logs) {
 }
 
 function initChart() {
-    try {
-        if (typeof LightweightCharts === 'undefined') {
-            console.warn("LightweightCharts library failed to load from CDN.");
-            return;
-        }
-        const chartContainer = document.getElementById('equityChart');
-        if (!chartContainer) return;
+    const canvas = document.getElementById('equityChart');
+    if (!canvas) return;
     
-    equityChart = LightweightCharts.createChart(chartContainer, {
-        layout: {
-            background: { type: 'solid', color: 'transparent' },
-            textColor: '#8892b0',
+    const ctx = canvas.getContext('2d');
+    equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Account Equity (USDT)',
+                data: [],
+                borderColor: '#00e676',
+                backgroundColor: 'rgba(0, 230, 118, 0.08)',
+                borderWidth: 2,
+                pointRadius: 3,
+                pointBackgroundColor: '#00e676',
+                pointBorderColor: 'transparent',
+                tension: 0.3,
+                fill: true,
+            }]
         },
-        grid: {
-            vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
-            horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
-        },
-        timeScale: {
-            timeVisible: true,
-            secondsVisible: false,
-        },
-    });
-
-    equitySeries = equityChart.addAreaSeries({
-        lineColor: '#00e676',
-        topColor: 'rgba(0, 230, 118, 0.4)',
-        bottomColor: 'rgba(0, 230, 118, 0.0)',
-        lineWidth: 2,
-    });
-    
-    window.addEventListener('resize', () => {
-        if (equityChart && chartContainer) {
-            equityChart.resize(chartContainer.clientWidth, 350);
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 14, 35, 0.9)',
+                    titleColor: '#8892b0',
+                    bodyColor: '#e2e8f0',
+                    borderColor: 'rgba(0,230,118,0.3)',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: ctx => ` ${ctx.parsed.y.toFixed(4)} USDT`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(42, 46, 57, 0.5)' },
+                    ticks: { color: '#8892b0', maxTicksLimit: 8, maxRotation: 0 }
+                },
+                y: {
+                    grid: { color: 'rgba(42, 46, 57, 0.5)' },
+                    ticks: {
+                        color: '#8892b0',
+                        callback: val => val.toFixed(2)
+                    }
+                }
+            }
         }
     });
-    } catch (e) {
-        console.error("Failed to initialize chart:", e);
-    }
 }
 
-function updateEquityChart(history, liveEq) {
-    if (!equitySeries) return;
+// Filter history by range and re-render chart
+function renderEquityChart() {
+    if (!equityChart) return;
     
-    const chartData = [];
+    let history = allEquityHistory;
+    
+    // Filter by selected time range
+    if (chartRangeDays > 0) {
+        const cutoff = Date.now() - chartRangeDays * 24 * 60 * 60 * 1000;
+        history = history.filter(item => new Date(item.time).getTime() >= cutoff);
+    }
+    
+    const labels = [];
+    const values = [];
+    
     history.forEach(item => {
-        chartData.push({
-            // LightweightCharts defaults to UTC. Add 8 hours (28800s) to force Beijing Time display
-            time: Math.floor(new Date(item.time).getTime() / 1000) + 28800,
-            value: parseFloat(item.equity)
-        });
+        const d = new Date(item.time);
+        // For ranges > 7 days, show only date; otherwise show date + time
+        let label;
+        if (chartRangeDays > 7) {
+            label = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+        } else {
+            label = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        }
+        labels.push(label);
+        values.push(parseFloat(item.equity));
     });
     
     // Add current live tick
-    const now = Math.floor(Date.now() / 1000) + 28800;
-    // If the last history point is exactly now or slightly ahead (time sync issue), don't add duplicate time
-    if (chartData.length === 0 || now > chartData[chartData.length - 1].time) {
-        chartData.push({
-            time: now,
-            value: parseFloat(liveEq)
-        });
-    } else if (chartData.length > 0) {
-        chartData[chartData.length - 1].value = parseFloat(liveEq);
+    if (lastLiveEq && parseFloat(lastLiveEq) > 0) {
+        const now = new Date();
+        const label = chartRangeDays > 7
+            ? `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}`
+            : `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+        if (labels.length === 0 || labels[labels.length - 1] !== label) {
+            labels.push(label);
+            values.push(parseFloat(lastLiveEq));
+        } else {
+            values[values.length - 1] = parseFloat(lastLiveEq);
+        }
     }
     
-    equitySeries.setData(chartData);
-    equityChart.timeScale().fitContent();
+    equityChart.data.labels = labels;
+    equityChart.data.datasets[0].data = values;
+    equityChart.update('none');
 }
 
 // Initial fetch and interval setup
 async function init() {
     initChart();
-    // Bind buttons
+    // Bind trade filter buttons
     if (applyFilterBtn) {
         applyFilterBtn.addEventListener('click', () => {
             fetchStatus();
@@ -305,6 +346,16 @@ async function init() {
             fetchStatus();
         });
     }
+    // Bind chart range buttons
+    const rangeBtns = document.querySelectorAll('.chart-range-btn');
+    rangeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            rangeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            chartRangeDays = parseInt(btn.dataset.days);
+            renderEquityChart();
+        });
+    });
 
     await fetchStatus();
     await fetchLogs();
