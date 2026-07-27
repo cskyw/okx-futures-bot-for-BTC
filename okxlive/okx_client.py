@@ -289,15 +289,6 @@ class OKXClient:
                 "slOrdPx": "-1"
             })
             
-        if tp_pct and tp_sz:
-            tp_price = round(limit_price * (1 + tp_pct), 1)
-            algo_ords.append({
-                "attachAlgoOrdType": "tp",
-                "tpTriggerPx": str(tp_price),
-                "tpOrdPx": "-1",
-                "sz": self._fmt_sz(tp_sz)
-            })
-            
         if algo_ords:
             body["attachAlgoOrds"] = algo_ords
 
@@ -379,15 +370,6 @@ class OKXClient:
                 "slOrdPx": "-1"
             })
             
-        if tp_pct and tp_sz:
-            tp_price = round(limit_price * (1 - tp_pct), 1)
-            algo_ords.append({
-                "attachAlgoOrdType": "tp",
-                "tpTriggerPx": str(tp_price),
-                "tpOrdPx": "-1",
-                "sz": self._fmt_sz(tp_sz)
-            })
-            
         if algo_ords:
             body["attachAlgoOrds"] = algo_ords
 
@@ -426,3 +408,49 @@ class OKXClient:
             logger.info(f"[平空成功] ordId={data['data'][0].get('ordId')}")
             return True
         return False
+
+    def place_tp_order(
+        self,
+        instId:      str,
+        posSide:     str,
+        tp_price:    float,
+        sz:          float,
+        td_mode:     str = "cross",
+    ) -> Optional[str]:
+        """
+        单独添加条件单（限价止盈），支持指定平仓数量
+        
+        参数：
+        - posSide: "long"（平多）或 "short"（平空）
+        - tp_price: 触发价格（也是委托价格，限价止盈）
+        - sz: 平仓张数
+        
+        返回：ordId（成功）或 None（失败）
+        """
+        sz = max(0.01, round(sz, 2))
+        
+        if posSide == "long":
+            side = "sell"
+            logger.info(f"[添加多单止盈] tp_price={tp_price:.2f} sz={sz}张")
+        else:
+            side = "buy"
+            logger.info(f"[添加空单止盈] tp_price={tp_price:.2f} sz={sz}张")
+
+        body = {
+            "instId":  instId,
+            "tdMode":  td_mode,
+            "side":    side,
+            "posSide": posSide,
+            "ordType": "conditional",
+            "triggerPx": str(tp_price),
+            "px":        str(tp_price),
+            "sz":        self._fmt_sz(sz),
+        }
+
+        data = self._post("/api/v5/trade/order-algo", body)
+        if data and data["data"]:
+            ordId = data["data"][0].get("ordId")
+            logger.info(f"[止盈单添加成功] ordId={ordId}")
+            return ordId
+        logger.error(f"[止盈单添加失败]")
+        return None

@@ -67,6 +67,32 @@ def process_pending_orders(client: OKXClient, state: StateManager):
             direction = p["direction"]
             sl_price  = avg_px * (1 - CONFIG["sl_pct"]) if direction == "long" \
                         else avg_px * (1 + CONFIG["sl_pct"])
+            
+            tp1_pct = CONFIG.get("tp1_pct", 0.03)
+            tp1_sell_prop = CONFIG.get("tp1_sell_prop", 0.5)
+            tp_sz = max(0.01, round(fill_sz * tp1_sell_prop, 2))
+            
+            if direction == "long":
+                tp_price = round(avg_px * (1 + tp1_pct), 1)
+                tp_ordId = client.place_tp_order(
+                    instId=CONFIG["inst_id"],
+                    posSide="long",
+                    tp_price=tp_price,
+                    sz=tp_sz,
+                    td_mode=CONFIG["td_mode"],
+                )
+            else:
+                tp_price = round(avg_px * (1 - tp1_pct), 1)
+                tp_ordId = client.place_tp_order(
+                    instId=CONFIG["inst_id"],
+                    posSide="short",
+                    tp_price=tp_price,
+                    sz=tp_sz,
+                    td_mode=CONFIG["td_mode"],
+                )
+            
+            attached_tp1 = tp_ordId is not None
+            
             entry = {
                 "price":        avg_px,
                 "sz":           fill_sz,
@@ -75,13 +101,19 @@ def process_pending_orders(client: OKXClient, state: StateManager):
                 "direction":    direction,
                 "open_time":    p["open_time"],
                 "lever":        p["lever"],
-                "attached_tp1": True,
+                "attached_tp1": attached_tp1,
+                "tp1_price":    tp_price,
+                "tp1_sz":       tp_sz,
             }
             key     = "long_entries" if direction == "long" else "short_entries"
             entries = state.get(key, [])
             entries.append(entry)
             state.set(key, entries)
-            logger.info(f"  [PENDING 成交确认] {direction} avgPx={avg_px:.2f} sz={fill_sz}张 sl={sl_price:.2f}")
+            
+            if attached_tp1:
+                logger.info(f"  [PENDING 成交确认] {direction} avgPx={avg_px:.2f} sz={fill_sz}张 sl={sl_price:.2f} | TP1 止盈单已添加: tp_price={tp_price:.2f} sz={tp_sz}张 ordId={tp_ordId}")
+            else:
+                logger.info(f"  [PENDING 成交确认] {direction} avgPx={avg_px:.2f} sz={fill_sz}张 sl={sl_price:.2f} | TP1 止盈单添加失败，将使用本地轮询触发")
 
         elif state_val == "canceled":
             logger.info(f"  [PENDING 已取消] ordId={p['ordId']} 清除")
