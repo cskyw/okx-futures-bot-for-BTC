@@ -418,39 +418,38 @@ class OKXClient:
         td_mode:     str = "cross",
     ) -> Optional[str]:
         """
-        单独添加条件单（限价止盈），支持指定平仓数量
+        开仓成交后立即挂一笔普通限价平仓单（TP1 半仓止盈）
         
         参数：
         - posSide: "long"（平多）或 "short"（平空）
-        - tp_price: 触发价格（也是委托价格，限价止盈）
-        - sz: 平仓张数
+        - tp_price: 止盈限价价格（如开仓均价 * 1.03）
+        - sz: 平仓张数（半仓）
         
-        返回：ordId（成功）或 None（失败）
+        返回： ordId（成功）或 None（失败）
         """
         sz = max(0.01, round(sz, 2))
         
         if posSide == "long":
             side = "sell"
-            logger.info(f"[添加多单止盈] tp_price={tp_price:.2f} sz={sz}张")
+            logger.info(f"[挂多单止盈限价单] tp_price={tp_price:.2f} sz={sz}张")
         else:
             side = "buy"
-            logger.info(f"[添加空单止盈] tp_price={tp_price:.2f} sz={sz}张")
+            logger.info(f"[挂空单止盈限价单] tp_price={tp_price:.2f} sz={sz}张")
 
         body = {
             "instId":  instId,
             "tdMode":  td_mode,
             "side":    side,
             "posSide": posSide,
-            "ordType": "conditional",
-            "triggerPx": str(tp_price),
-            "px":        str(tp_price),
-            "sz":        self._fmt_sz(sz),
+            "ordType": "limit",       # 普通限价单，不是条件单
+            "px":      str(round(tp_price, 1)),
+            "sz":      self._fmt_sz(sz),
         }
 
-        data = self._post("/api/v5/trade/order-algo", body)
+        data = self._post("/api/v5/trade/order", body)  # 普通下单接口
         if data and data["data"]:
             ordId = data["data"][0].get("ordId")
-            logger.info(f"[止盈单添加成功] ordId={ordId}")
+            logger.info(f"[止盈限价单挂单成功] ordId={ordId}")
             return ordId
-        logger.error(f"[止盈单添加失败]")
+        logger.error(f"[止盈限价单挂单失败] 返回信息: {data}")
         return None
