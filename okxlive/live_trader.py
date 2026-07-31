@@ -29,6 +29,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 不重复打印相同不一致的 warning（key = 方向_state张数_okx张数）
+_warned_mismatches: set = set()
+
 
 # ==================== pending 订单处理 ====================
 
@@ -104,6 +107,7 @@ def process_pending_orders(client: OKXClient, state: StateManager):
                 "attached_tp1": attached_tp1,
                 "tp1_price":    tp_price,
                 "tp1_sz":       tp_sz,
+                "tp_ordId":     tp_ordId,
             }
             key     = "long_entries" if direction == "long" else "short_entries"
             entries = state.get(key, [])
@@ -190,10 +194,13 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                 state.set("long_entries", state_long)
                 changed = True
             elif abs(total_state_sz - okx_sz) > 0.005:
-                logger.warning(
-                    f"  [多头] 总张数不一致! state={total_state_sz} OKX={okx_sz}，"
-                    f"请手动核对，本次不做任何调整"
-                )
+                mismatch_key = f"long_{total_state_sz}_{okx_sz}"
+                if mismatch_key not in _warned_mismatches:
+                    logger.warning(
+                        f"  [多头] 总张数不一致! state={total_state_sz} OKX={okx_sz}，"
+                        f"请手动核对，本次不做任何调整"
+                    )
+                    _warned_mismatches.add(mismatch_key)
             else:
                 logger.debug(f"  [多头] state 与 OKX 一致，无需修改")
     
@@ -220,6 +227,12 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
         if state_long:
             logger.warning(f"  [多头] OKX 无持仓，state 有 {len(state_long)} 笔，清除幽灵仓位")
             for entry in state_long:
+                # 撤销对应的 TP1 止盈单
+                tp_ordId = entry.get("tp_ordId")
+                if tp_ordId:
+                    client.cancel_tp_order(CONFIG["inst_id"], tp_ordId)
+                    logger.info(f"  [多头] 已撤销 TP1 止盈单 ordId={tp_ordId}")
+                
                 ep = entry["price"]
                 lever = entry.get("lever", CONFIG["lever"])
                 pnl = (price / ep) - 1.0
@@ -277,10 +290,13 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
                 state.set("short_entries", state_short)
                 changed = True
             elif abs(total_state_sz - okx_sz) > 0.005:
-                logger.warning(
-                    f"  [空头] 总张数不一致! state={total_state_sz} OKX={okx_sz}，"
-                    f"请手动核对，本次不做任何调整"
-                )
+                mismatch_key = f"short_{total_state_sz}_{okx_sz}"
+                if mismatch_key not in _warned_mismatches:
+                    logger.warning(
+                        f"  [空头] 总张数不一致! state={total_state_sz} OKX={okx_sz}，"
+                        f"请手动核对，本次不做任何调整"
+                    )
+                    _warned_mismatches.add(mismatch_key)
             else:
                 logger.debug(f"  [空头] state 与 OKX 一致，无需修改")
         
@@ -307,6 +323,12 @@ def sync_positions_from_okx(client: OKXClient, state: StateManager, price: float
         if state_short:
             logger.warning(f"  [空头] OKX 无持仓，state 有 {len(state_short)} 笔，清除幽灵仓位")
             for entry in state_short:
+                # 撤销对应的 TP1 止盈单
+                tp_ordId = entry.get("tp_ordId")
+                if tp_ordId:
+                    client.cancel_tp_order(CONFIG["inst_id"], tp_ordId)
+                    logger.info(f"  [空头] 已撤销 TP1 止盈单 ordId={tp_ordId}")
+                
                 ep = entry["price"]
                 lever = entry.get("lever", CONFIG["lever"])
                 pnl = (ep / price) - 1.0
@@ -357,48 +379,84 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
+        # 止损检测：如果当前价格跌破止损价，认为该笔仓位已被交易所 SL 平掉
+        if price <= sl_p:
+            logger.info(f"  [LONG SL] 触发止损价! ep={ep:.2f} price={price:.2f} <= {sl_p:.2f}")
+            tp_ordId = entry.get("tp_ordId")
+            if tp_ordId:
+                client.cancel_tp_order(CONFIG["inst_id"], tp_ordId)
+                logger.info(f"  [LONG SL] 已撤销对应的 TP1 限价单 ordId={tp_ordId}")
+            
+            lever = entry.get("lever", CONFIG["lever"])
+            state.add_trade_record({
+                "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                "direction": "long",
+                "sz": sz,
+                "entry_price": ep,
+                "exit_price": price,
+                "pnl_pct": (price/ep)-1.0,
+                "lev_pnl_pct": ((price/ep)-1.0) * lever,
+                "reason": "SL / Triggered"
+            })
+            state.inc("completed_long_trades")
+            acted = True
+            continue  # 仓位已平，不再保留
+
         if not tp1done:
-            real_pos = positions if positions is not None else client.get_positions(CONFIG["inst_id"])
-            real_sz = real_pos["long"]["sz"] if real_pos and real_pos["long"] else 0.0
+            tp_ordId = entry.get("tp_ordId")
             
-            if real_sz <= 0:
-                logger.info(f"  [LONG TP1] 检测到持仓已全部平仓（交易所TP1/SL），跳过本地处理")
-                continue
-            
-            if entry.get("attached_tp1", False):
-                tp1_sell_prop = CONFIG.get("tp1_sell_prop", 0.5)
-                expected_sz = sz * (1 - tp1_sell_prop)
-                if real_sz > 0 and real_sz < expected_sz * 1.1:
-                    logger.info(f"  [LONG TP1] 检测到交易所已执行止盈，本地状态同步: 原sz={sz} 实际sz={real_sz}")
-                    entry["sz"] = round(real_sz, 2)
-                    entry["tp1_done"] = True
-                    entry["sl_price"] = ep
+            if tp_ordId:
+                # 新模式：直接查询限价止盈单本身是否成交
+                order_result = client.get_order(CONFIG["inst_id"], tp_ordId)
+                if order_result is None:
+                    # 查询失败，跳过，下次再试
+                    new_entries.append(entry)
+                    continue
+                order_state = order_result.get("state")
+                if order_state == "filled":
+                    # 限价止盈单已成交，同步本地状态
+                    tp_sz = entry.get("tp1_sz", round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+                    real_exit_price = order_result.get("avgPx") or price
                     lever = entry.get("lever", CONFIG["lever"])
-                    closed_sz = round(sz - real_sz, 2)
+                    pnl_tp = (real_exit_price / ep) - 1.0
+                    logger.info(
+                        f"  [LONG TP1] 限价止盈单已成交! ordId={tp_ordId} "
+                        f"exit={real_exit_price:.2f} sz={tp_sz}张 pnl={pnl_tp*lever*100:.2f}%"
+                    )
+                    entry["sz"] = round(sz - tp_sz, 2)
+                    entry["tp1_done"] = True
+                    entry.pop("tp_ordId", None)  # 撤销已成交的 ordId 引用
                     state.add_trade_record({
                         "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                         "direction": "long",
-                        "sz": closed_sz,
+                        "sz": tp_sz,
                         "entry_price": ep,
-                        "exit_price": price,
-                        "pnl_pct": pnl_pct,
-                        "lev_pnl_pct": pnl_pct * lever,
-                        "reason": "TP1 Partial (Exchange)"
+                        "exit_price": real_exit_price,
+                        "pnl_pct": pnl_tp,
+                        "lev_pnl_pct": pnl_tp * lever,
+                        "reason": "TP1 Partial (Limit)"
                     })
                     acted = True
+                elif order_state == "canceled":
+                    # 止盈单被撤销（可能是止损触发时自动撤掉的）
+                    logger.info(f"  [LONG TP1] 限价止盈单已被撤销 ordId={tp_ordId}，平仓可能已由止损触发")
+                    entry["tp1_done"] = True  # 不再尝试挂 TP1
+                    entry.pop("tp_ordId", None)
+                    acted = True
                 else:
+                    # live / partially_filled — 还没成交，继续等
                     new_entries.append(entry)
                     continue
-            else:
+            elif entry.get("attached_tp1", False):
+                # 老式入单（无 tp_ordId）：按当前价格判断是否到了止盈价
                 if pnl_pct >= CONFIG["tp1_pct"]:
                     tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-                    logger.info(f"  [LONG TP1] 遗留仓位本地止盈: 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
+                    logger.info(f"  [LONG TP1] 老式入单本地止盈: 达到 {CONFIG['tp1_pct']*100}% 涨幅，市价平半仓 {tp_sz}张")
                     ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
                     if ok:
+                        lever = entry.get("lever", CONFIG["lever"])
                         entry["sz"] = round(sz - tp_sz, 2)
                         entry["tp1_done"] = True
-                        entry["sl_price"] = ep
-                        lever = entry.get("lever", CONFIG["lever"])
                         state.add_trade_record({
                             "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                             "direction": "long",
@@ -409,10 +467,37 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
                             "lev_pnl_pct": pnl_pct * lever,
                             "reason": "TP1 Partial (Legacy)"
                         })
-                        logger.info(f"  [LONG TP1] 平仓成功，剩余 {entry['sz']}张，止损移至 {ep:.2f}")
+                        logger.info(f"  [LONG TP1] 平仓成功，剩余 {entry['sz']}张")
                         acted = True
                     else:
-                        logger.error(f"  [LONG TP1] 市价平半仓下单失败，保留 entry 等下次重试")
+                        logger.error(f"  [LONG TP1] 市价平半仓下单失败，下次重试")
+                        new_entries.append(entry)
+                        continue
+                else:
+                    new_entries.append(entry)
+                    continue
+            else:
+                # 没有 tp_ordId 也没有 attached_tp1 — 直接用价格达到不
+                if pnl_pct >= CONFIG["tp1_pct"]:
+                    tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+                    logger.info(f"  [LONG TP1] 同上，市价平半仓 {tp_sz}张")
+                    ok = client.close_long(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
+                    if ok:
+                        lever = entry.get("lever", CONFIG["lever"])
+                        entry["sz"] = round(sz - tp_sz, 2)
+                        entry["tp1_done"] = True
+                        state.add_trade_record({
+                            "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                            "direction": "long",
+                            "sz": tp_sz,
+                            "entry_price": ep,
+                            "exit_price": price,
+                            "pnl_pct": pnl_pct,
+                            "lev_pnl_pct": pnl_pct * lever,
+                            "reason": "TP1 Partial (Legacy)"
+                        })
+                        acted = True
+                    else:
                         new_entries.append(entry)
                         continue
                 else:
@@ -506,48 +591,81 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
             f"pnl={pnl_pct*100:.2f}% tp1_done={tp1done}"
         )
 
+        # 止损检测：如果当前价格突破止损价，认为该笔仓位已被交易所 SL 平掉
+        if price >= sl_p:
+            logger.info(f"  [SHORT SL] 触发止损价! ep={ep:.2f} price={price:.2f} >= {sl_p:.2f}")
+            tp_ordId = entry.get("tp_ordId")
+            if tp_ordId:
+                client.cancel_tp_order(CONFIG["inst_id"], tp_ordId)
+                logger.info(f"  [SHORT SL] 已撤销对应的 TP1 限价单 ordId={tp_ordId}")
+            
+            lever = entry.get("lever", CONFIG["lever"])
+            state.add_trade_record({
+                "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                "direction": "short",
+                "sz": sz,
+                "entry_price": ep,
+                "exit_price": price,
+                "pnl_pct": (ep/price)-1.0,
+                "lev_pnl_pct": ((ep/price)-1.0) * lever,
+                "reason": "SL / Triggered"
+            })
+            state.inc("completed_short_trades")
+            acted = True
+            continue  # 仓位已平，不再保留
+
         if not tp1done:
-            real_pos = positions if positions is not None else client.get_positions(CONFIG["inst_id"])
-            real_sz = real_pos["short"]["sz"] if real_pos and real_pos["short"] else 0.0
+            tp_ordId = entry.get("tp_ordId")
             
-            if real_sz <= 0:
-                logger.info(f"  [SHORT TP1] 检测到持仓已全部平仓（交易所TP1/SL），跳过本地处理")
-                continue
-            
-            if entry.get("attached_tp1", False):
-                tp1_sell_prop = CONFIG.get("tp1_sell_prop", 0.5)
-                expected_sz = sz * (1 - tp1_sell_prop)
-                if real_sz > 0 and real_sz < expected_sz * 1.1:
-                    logger.info(f"  [SHORT TP1] 检测到交易所已执行止盈，本地状态同步: 原sz={sz} 实际sz={real_sz}")
-                    entry["sz"] = round(real_sz, 2)
-                    entry["tp1_done"] = True
-                    entry["sl_price"] = ep
+            if tp_ordId:
+                # 新模式：直接查询限价止盈单本身是否成交
+                order_result = client.get_order(CONFIG["inst_id"], tp_ordId)
+                if order_result is None:
+                    new_entries.append(entry)
+                    continue
+                order_state = order_result.get("state")
+                if order_state == "filled":
+                    tp_sz = entry.get("tp1_sz", round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+                    real_exit_price = order_result.get("avgPx") or price
                     lever = entry.get("lever", CONFIG["lever"])
-                    closed_sz = round(sz - real_sz, 2)
+                    pnl_tp = (ep / real_exit_price) - 1.0
+                    logger.info(
+                        f"  [SHORT TP1] 限价止盈单已成交! ordId={tp_ordId} "
+                        f"exit={real_exit_price:.2f} sz={tp_sz}张 pnl={pnl_tp*lever*100:.2f}%"
+                    )
+                    entry["sz"] = round(sz - tp_sz, 2)
+                    entry["tp1_done"] = True
+                    entry.pop("tp_ordId", None)
                     state.add_trade_record({
                         "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                         "direction": "short",
-                        "sz": closed_sz,
+                        "sz": tp_sz,
                         "entry_price": ep,
-                        "exit_price": price,
-                        "pnl_pct": pnl_pct,
-                        "lev_pnl_pct": pnl_pct * lever,
-                        "reason": "TP1 Partial (Exchange)"
+                        "exit_price": real_exit_price,
+                        "pnl_pct": pnl_tp,
+                        "lev_pnl_pct": pnl_tp * lever,
+                        "reason": "TP1 Partial (Limit)"
                     })
                     acted = True
+                elif order_state == "canceled":
+                    logger.info(f"  [SHORT TP1] 限价止盈单已被撤销 ordId={tp_ordId}，平仓可能已由止损触发")
+                    entry["tp1_done"] = True
+                    entry.pop("tp_ordId", None)
+                    acted = True
                 else:
+                    # live / partially_filled — 还没成交，继续等
                     new_entries.append(entry)
                     continue
-            else:
+            elif entry.get("attached_tp1", False):
+                # 老式入单（无 tp_ordId）：按当前价格判断是否到了止盈价
                 if pnl_pct >= CONFIG["tp1_pct"]:
                     tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
-                    logger.info(f"  [SHORT TP1] 遗留仓位本地止盈: 达到 {CONFIG['tp1_pct']*100}% 涨幅，向交易所发市价平半仓指令 {tp_sz}张")
+                    logger.info(f"  [SHORT TP1] 老式入单本地止盈: 达到 {CONFIG['tp1_pct']*100}% 跌幅，市价平半仓 {tp_sz}张")
                     ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
                     if ok:
+                        lever = entry.get("lever", CONFIG["lever"])
                         entry["sz"] = round(sz - tp_sz, 2)
                         entry["tp1_done"] = True
-                        entry["sl_price"] = ep
-                        lever = entry.get("lever", CONFIG["lever"])
                         state.add_trade_record({
                             "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                             "direction": "short",
@@ -558,10 +676,35 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
                             "lev_pnl_pct": pnl_pct * lever,
                             "reason": "TP1 Partial (Legacy)"
                         })
-                        logger.info(f"  [SHORT TP1] 平仓成功，剩余 {entry['sz']}张，止损移至 {ep:.2f}")
+                        logger.info(f"  [SHORT TP1] 平仓成功，剩余 {entry['sz']}张")
                         acted = True
                     else:
-                        logger.error(f"  [SHORT TP1] 市价平半仓下单失败，保留 entry 等下次重试")
+                        logger.error(f"  [SHORT TP1] 市价平半仓下单失败，下次重试")
+                        new_entries.append(entry)
+                        continue
+                else:
+                    new_entries.append(entry)
+                    continue
+            else:
+                if pnl_pct >= CONFIG["tp1_pct"]:
+                    tp_sz = max(0.01, round(sz * CONFIG.get("tp1_sell_prop", 0.5), 2))
+                    ok = client.close_short(CONFIG["inst_id"], tp_sz, CONFIG["td_mode"], ordType="market")
+                    if ok:
+                        lever = entry.get("lever", CONFIG["lever"])
+                        entry["sz"] = round(sz - tp_sz, 2)
+                        entry["tp1_done"] = True
+                        state.add_trade_record({
+                            "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                            "direction": "short",
+                            "sz": tp_sz,
+                            "entry_price": ep,
+                            "exit_price": price,
+                            "pnl_pct": pnl_pct,
+                            "lev_pnl_pct": pnl_pct * lever,
+                            "reason": "TP1 Partial (Legacy)"
+                        })
+                        acted = True
+                    else:
                         new_entries.append(entry)
                         continue
                 else:

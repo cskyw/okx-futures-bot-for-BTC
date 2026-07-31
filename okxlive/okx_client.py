@@ -453,3 +453,31 @@ class OKXClient:
             return ordId
         logger.error(f"[止盈限价单挂单失败] 返回信息: {data}")
         return None
+
+    def cancel_tp_order(self, instId: str, ordId: str) -> bool:
+        """
+        撤销TP1限价止盈单
+        
+        参数：
+        - instId: 产品ID
+        - ordId: 委托单ID（来自 place_tp_order 返回的 ordId）
+        
+        返回：True 表示成功，False 表示失败
+        """
+        if not ordId:
+            logger.warning(f"[撤销止盈单] ordId 为空，无法撤单")
+            return False
+            
+        # 注意：这里的 body 必须是一个数组，根据 OKX 的普通撤单接口规范
+        body = [{
+            "instId": instId,
+            "ordId": ordId,
+        }]
+
+        data = self._post("/api/v5/trade/cancel-order", body)
+        if data and data.get("data") and data["data"][0].get("sCode") == "0":
+            logger.info(f"[撤销止盈单成功] ordId={ordId}")
+            return True
+        else:
+            logger.error(f"[撤销止盈单失败] 返回信息: {data}")
+            return False
