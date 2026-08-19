@@ -468,11 +468,11 @@ class OKXClient:
             logger.warning(f"[撤销止盈单] ordId 为空，无法撤单")
             return False
             
-        # 注意：这里的 body 必须是一个数组，根据 OKX 的普通撤单接口规范
-        body = [{
+        # 注意：这里的 body 必须是一个字典对象
+        body = {
             "instId": instId,
             "ordId": ordId,
-        }]
+        }
 
         data = self._post("/api/v5/trade/cancel-order", body)
         if data and data.get("data") and data["data"][0].get("sCode") == "0":

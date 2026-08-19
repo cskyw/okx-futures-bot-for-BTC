@@ -9,6 +9,7 @@ const completedTradesEl = document.getElementById('completedTrades');
 const btcPriceEl = document.getElementById('btcPrice');
 const winRateEl = document.getElementById('winRate');
 const totalPnlEl = document.getElementById('totalPnl');
+const totalPnlPctEl = document.getElementById('totalPnlPct');
 const annualReturnEl = document.getElementById('annualReturn');
 const modeBadgeEl = document.getElementById('modeBadge');
 const leverBadgeEl = document.getElementById('leverBadge');
@@ -113,10 +114,16 @@ function updateMetrics(data) {
     if (winRateEl && data.metadata.win_rate !== undefined) {
         winRateEl.textContent = `${parseFloat(data.metadata.win_rate).toFixed(1)}%`;
     }
-    if (totalPnlEl && data.metadata.cumulative_pnl_pct !== undefined) {
-        const pnlVal = parseFloat(data.metadata.cumulative_pnl_pct) * 100;
-        totalPnlEl.textContent = `${pnlVal > 0 ? '+' : ''}${pnlVal.toFixed(2)}%`;
+    if (totalPnlEl && data.metadata.cumulative_pnl_usdt !== undefined) {
+        const pnlVal = parseFloat(data.metadata.cumulative_pnl_usdt);
+        totalPnlEl.textContent = `${pnlVal > 0 ? '+' : ''}${pnlVal.toFixed(2)} USDT`;
         totalPnlEl.style.color = pnlVal > 0 ? 'var(--long-color)' : (pnlVal < 0 ? 'var(--short-color)' : 'inherit');
+        
+        if (totalPnlPctEl && data.metadata.cumulative_pnl_pct !== undefined) {
+            const pnlPctVal = parseFloat(data.metadata.cumulative_pnl_pct) * 100;
+            totalPnlPctEl.textContent = `(${pnlPctVal > 0 ? '+' : ''}${pnlPctVal.toFixed(2)}%)`;
+            totalPnlPctEl.style.color = pnlPctVal > 0 ? 'var(--long-color)' : (pnlPctVal < 0 ? 'var(--short-color)' : 'inherit');
+        }
     }
     if (annualReturnEl && data.metadata.annualized_return !== undefined) {
         const annVal = parseFloat(data.metadata.annualized_return) * 100;

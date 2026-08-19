@@ -6,13 +6,16 @@ config.py
 合约规格：BTC-USDT-SWAP 每张 = 0.01 BTC
 """
 import os
+from dotenv import load_dotenv
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 CONFIG = {
     # ====== OKX API 配置 ======
-    "api_key": "xxx",
-    "secret_key": "xxx",
-    "passphrase": "xxx",
+    "api_key": os.getenv("OKX_API_KEY", ""),
+    "secret_key": os.getenv("OKX_SECRET_KEY", ""),
+    "passphrase": os.getenv("OKX_PASSPHRASE", ""),
 
     # True = 模拟盘（测试用），False = 实盘
     "simulated": False,
@@ -33,7 +36,7 @@ CONFIG = {
     "buy_pct":       0.15,     # 每次开仓使用账户权益的 15%（作为保证金）
     "tp1_pct":       0.03,     # TP1 止盈 3%（基于开仓价）
     "tp2_active_pct":0.20,     # TP2 追踪止损激活线 20%
-    "tp2_hard_pct":  0.27,     # TP2 硬性止盈 27%
+    "tp2_hard_pct":  0.30,     # TP2 硬性止盈 30%
     "tp2_trail_pct": 0.05,     # TP2 追踪回撤 5%
     "sl_pct":        0.05,     # 止损 5%（5倍杠杆下实际亏损约25%保证金，请勿随意调大）
     "tp1_sell_prop": 0.5,      # TP1 平掉该仓位的 50% (半仓)

@@ -85,11 +85,25 @@ def get_status():
         cumulative_pnl_pct = sum(t.get("pnl_pct", 0) for t in trade_history)
         avg_pnl_pct = (cumulative_pnl_pct / total_trades) if total_trades > 0 else 0
 
+        cumulative_pnl_usdt = 0.0
+        ct_val = CONFIG.get("ct_val", 0.01)
+        for t in trade_history:
+            sz = t.get("sz", 0)
+            ep = t.get("entry_price", 0)
+            xp = t.get("exit_price", 0)
+            direction = t.get("direction", "long")
+            if direction == "long":
+                cumulative_pnl_usdt += (xp - ep) * sz * ct_val
+            elif direction == "short":
+                cumulative_pnl_usdt += (ep - xp) * sz * ct_val
+
         completed_long_trades = sum(1 for t in trade_history if t.get("direction") == "long")
         completed_short_trades = sum(1 for t in trade_history if t.get("direction") == "short")
 
         # Calculate annualized return
         annualized_return = 0
+        true_return_pct = cumulative_pnl_pct
+
         try:
             now_time = datetime.now(timezone(timedelta(hours=8)))
             actual_sd = sd
@@ -111,7 +125,15 @@ def get_status():
                 actual_ed = min(ed, now_time) if ed else now_time
                 days_elapsed = (actual_ed - actual_sd).total_seconds() / 86400.0
                 days_elapsed = max(days_elapsed, 1.0) # Assume at least 1 day has passed
-                annualized_return = (cumulative_pnl_pct / days_elapsed) * 365
+                current_eq = account_info.get("totalEq", 0) if account_info else 0
+                if current_eq > 0:
+                    starting_eq = current_eq - cumulative_pnl_usdt
+                    if starting_eq <= 0:
+                        starting_eq = current_eq
+                    true_return_pct = cumulative_pnl_usdt / starting_eq
+                    annualized_return = (true_return_pct / days_elapsed) * 365
+                else:
+                    annualized_return = (cumulative_pnl_pct / days_elapsed) * 365
         except Exception:
             pass
             
@@ -141,7 +163,8 @@ def get_status():
                     "win_rate": win_rate,
                     "avg_pnl_pct": avg_pnl_pct,
                     "total_trades_history": total_trades,
-                    "cumulative_pnl_pct": cumulative_pnl_pct,
+                    "cumulative_pnl_pct": true_return_pct,
+                    "cumulative_pnl_usdt": cumulative_pnl_usdt,
                     "annualized_return": annualized_return
                 },
                 "trade_history": trade_history[:50], # Send last 50 for UI

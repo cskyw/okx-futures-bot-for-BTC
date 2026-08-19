@@ -508,9 +508,9 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
             lever = entry.get("lever", CONFIG["lever"])
             lev_pnl_pct = pnl_pct * lever
             
-            # 1. 硬性止盈检查 (27%)
-            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.27):
-                logger.info(f"  [LONG TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.27)*100}%，市价全平 {sz}张")
+            # 1. 硬性止盈检查 (30%)
+            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.30):
+                logger.info(f"  [LONG TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
                 ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                 if ok:
                     state.add_trade_record({
@@ -715,9 +715,9 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
             lever = entry.get("lever", CONFIG["lever"])
             lev_pnl_pct = pnl_pct * lever
             
-            # 1. 硬性止盈检查 (27%)
-            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.27):
-                logger.info(f"  [SHORT TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.27)*100}%，市价全平 {sz}张")
+            # 1. 硬性止盈检查 (30%)
+            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.30):
+                logger.info(f"  [SHORT TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
                 ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
                 if ok:
                     state.add_trade_record({
