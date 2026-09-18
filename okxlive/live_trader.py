@@ -508,28 +508,6 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
             lever = entry.get("lever", CONFIG["lever"])
             lev_pnl_pct = pnl_pct * lever
             
-            # 1. 硬性止盈检查 (30%)
-            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.30):
-                logger.info(f"  [LONG TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
-                ok = client.close_long(CONFIG["inst_id"], sz, CONFIG["td_mode"])
-                if ok:
-                    state.add_trade_record({
-                        "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                        "direction": "long",
-                        "sz": sz,
-                        "entry_price": ep,
-                        "exit_price": price,
-                        "pnl_pct": pnl_pct,
-                        "lev_pnl_pct": lev_pnl_pct,
-                        "reason": "TP2 Hard"
-                    })
-                    state.inc("completed_long_trades")
-                    acted = True
-                else:
-                    logger.error("  [LONG TP2] 硬性止盈下单失败")
-                    new_entries.append(entry)
-                continue
-                
             # 2. 追踪止损激活与最高点更新
             max_pnl = entry.get("max_pnl_pct", 0.0)
             if lev_pnl_pct >= CONFIG.get("tp2_active_pct", 0.20):
@@ -715,28 +693,6 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
             lever = entry.get("lever", CONFIG["lever"])
             lev_pnl_pct = pnl_pct * lever
             
-            # 1. 硬性止盈检查 (30%)
-            if lev_pnl_pct >= CONFIG.get("tp2_hard_pct", 0.30):
-                logger.info(f"  [SHORT TP2] 硬性止盈触发! 杠杆收益 {lev_pnl_pct*100:.2f}% >= {CONFIG.get('tp2_hard_pct', 0.30)*100}%，市价全平 {sz}张")
-                ok = client.close_short(CONFIG["inst_id"], sz, CONFIG["td_mode"])
-                if ok:
-                    state.add_trade_record({
-                        "time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                        "direction": "short",
-                        "sz": sz,
-                        "entry_price": ep,
-                        "exit_price": price,
-                        "pnl_pct": pnl_pct,
-                        "lev_pnl_pct": lev_pnl_pct,
-                        "reason": "TP2 Hard"
-                    })
-                    state.inc("completed_short_trades")
-                    acted = True
-                else:
-                    logger.error("  [SHORT TP2] 硬性止盈下单失败")
-                    new_entries.append(entry)
-                continue
-                
             # 2. 追踪止损激活与最高点更新
             max_pnl = entry.get("max_pnl_pct", 0.0)
             if lev_pnl_pct >= CONFIG.get("tp2_active_pct", 0.20):
