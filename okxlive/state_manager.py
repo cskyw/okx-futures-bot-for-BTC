@@ -80,11 +80,9 @@ class StateManager:
     def get_trade_history(self) -> list:
         return self._history
 
-    def add_trade_record(self, record: dict, max_records: int = 200):
-        """记录历史交割单，头部插入保证最新的在最前，限制最大长度"""
+    def add_trade_record(self, record: dict):
+        """保留所有逐笔平仓记录，最新记录在最前。"""
         self._history.insert(0, record)
-        if len(self._history) > max_records:
-            self._history = self._history[:max_records]
 
     def get_equity_data(self) -> dict:
         return self._equity

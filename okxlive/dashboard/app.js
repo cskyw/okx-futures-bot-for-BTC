@@ -10,6 +10,7 @@ const btcPriceEl = document.getElementById('btcPrice');
 const winRateEl = document.getElementById('winRate');
 const totalPnlEl = document.getElementById('totalPnl');
 const totalPnlPctEl = document.getElementById('totalPnlPct');
+const totalPnlTitleEl = document.getElementById('totalPnlTitle');
 const annualReturnEl = document.getElementById('annualReturn');
 const modeBadgeEl = document.getElementById('modeBadge');
 const leverBadgeEl = document.getElementById('leverBadge');
@@ -29,9 +30,13 @@ let equityChart = null;  // Chart.js instance
 let chartRangeDays = 0;  // 0 = ALL, 7 = 7D, 30 = 30D, 90 = 90D
 let allEquityHistory = [];  // full cache of raw history from API
 let lastLiveEq = 0;
+let statusLoading = false;
+let logsLoading = false;
 
 // Fetch and update status
 async function fetchStatus() {
+    if (statusLoading) return;
+    statusLoading = true;
     try {
         let url = `${API_BASE}/status`;
         const start = filterStartEl.value;
@@ -69,11 +74,15 @@ async function fetchStatus() {
         console.error("Failed to fetch status:", err);
         pulseDot.style.backgroundColor = 'var(--short-color)';
         pulseDot.style.boxShadow = '0 0 10px var(--short-color)';
+    } finally {
+        statusLoading = false;
     }
 }
 
 // Fetch and update logs
 async function fetchLogs() {
+    if (logsLoading) return;
+    logsLoading = true;
     try {
         const res = await fetch(`${API_BASE}/logs?lines=70`);
         const data = await res.json();
@@ -83,6 +92,8 @@ async function fetchLogs() {
         }
     } catch (err) {
         console.error("Failed to fetch logs:", err);
+    } finally {
+        logsLoading = false;
     }
 }
 
@@ -114,21 +125,36 @@ function updateMetrics(data) {
     if (winRateEl && data.metadata.win_rate !== undefined) {
         winRateEl.textContent = `${parseFloat(data.metadata.win_rate).toFixed(1)}%`;
     }
-    if (totalPnlEl && data.metadata.cumulative_pnl_usdt !== undefined) {
+    if (totalPnlEl && data.metadata.cumulative_pnl_usdt != null) {
+        if (totalPnlTitleEl) totalPnlTitleEl.textContent = data.metadata.pnl_basis === 'local_history' ? 'Selected Trades PnL' : 'Total PnL';
         const pnlVal = parseFloat(data.metadata.cumulative_pnl_usdt);
         totalPnlEl.textContent = `${pnlVal > 0 ? '+' : ''}${pnlVal.toFixed(2)} USDT`;
         totalPnlEl.style.color = pnlVal > 0 ? 'var(--long-color)' : (pnlVal < 0 ? 'var(--short-color)' : 'inherit');
-        
-        if (totalPnlPctEl && data.metadata.cumulative_pnl_pct !== undefined) {
-            const pnlPctVal = parseFloat(data.metadata.cumulative_pnl_pct) * 100;
-            totalPnlPctEl.textContent = `(${pnlPctVal > 0 ? '+' : ''}${pnlPctVal.toFixed(2)}%)`;
-            totalPnlPctEl.style.color = pnlPctVal > 0 ? 'var(--long-color)' : (pnlPctVal < 0 ? 'var(--short-color)' : 'inherit');
+        if (totalPnlPctEl) {
+            const meta = data.metadata;
+            if (meta.pnl_basis === 'local_history') {
+                totalPnlPctEl.textContent = '所选区间：本地逐笔记录估算，未扣费用';
+            } else {
+                const from = meta.pnl_from_time ? meta.pnl_from_time.slice(0, 10) : '--';
+                const through = meta.pnl_as_of_time ? meta.pnl_as_of_time.slice(0, 16).replace('T', ' ') : '--';
+                totalPnlPctEl.textContent = meta.pnl_provisional_usdt
+                    ? `${from} 起；OKX 至 ${through}，后续本地估算 ${meta.pnl_provisional_usdt.toFixed(2)} USDT`
+                    : `${from} 起；已对账至 ${through}，不含持仓浮盈亏`;
+                if (meta.cumulative_pnl_pct != null) {
+                    totalPnlPctEl.textContent = `估算收益率 ${meta.cumulative_pnl_pct.toFixed(2)}% · ${totalPnlPctEl.textContent}`;
+                }
+            }
+            totalPnlPctEl.style.color = 'inherit';
         }
+    } else if (totalPnlEl) {
+        if (totalPnlTitleEl) totalPnlTitleEl.textContent = 'Total PnL';
+        totalPnlEl.textContent = '-- USDT';
+        if (totalPnlPctEl) totalPnlPctEl.textContent = '缺少 BTC 账单基准文件';
     }
-    if (annualReturnEl && data.metadata.annualized_return !== undefined) {
-        const annVal = parseFloat(data.metadata.annualized_return) * 100;
-        annualReturnEl.textContent = `${annVal > 0 ? '+' : ''}${annVal.toFixed(2)}%`;
-        annualReturnEl.style.color = annVal > 0 ? 'var(--long-color)' : (annVal < 0 ? 'var(--short-color)' : 'inherit');
+    if (annualReturnEl) {
+        const annual = data.metadata.annualized_return;
+        annualReturnEl.textContent = annual == null ? '--%' : `${annual > 0 ? '+' : ''}${annual.toFixed(2)}%`;
+        annualReturnEl.style.color = annual > 0 ? 'var(--long-color)' : (annual < 0 ? 'var(--short-color)' : 'inherit');
     }
 }
 
@@ -367,11 +393,10 @@ async function init() {
     await fetchStatus();
     await fetchLogs();
     
-    // Poll every 5 seconds for status
-    setInterval(fetchStatus, 5000);
+    // Reduce API calls while keeping the dashboard responsive.
+    setInterval(fetchStatus, 15000);
     
-    // Poll every 10 seconds for logs
-    setInterval(fetchLogs, 10000);
+    setInterval(fetchLogs, 30000);
 }
 
 init();

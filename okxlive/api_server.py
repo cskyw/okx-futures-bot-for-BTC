@@ -1,9 +1,11 @@
 import os
+import logging
 from flask import Flask, jsonify, request, redirect, send_from_directory
 from flask_cors import CORS
 from okx_client import OKXClient
 from config import CONFIG
 from state_manager import StateManager
+from pnl_ledger import BTCPnLLedger
 from datetime import datetime, timezone, timedelta
 
 # Use absolute paths so it works reliably on a server regardless of the current working directory
@@ -12,6 +14,8 @@ DASHBOARD_DIR = os.path.join(BASE_DIR, "dashboard")
 
 app = Flask(__name__, static_folder=DASHBOARD_DIR)
 CORS(app)  # Enable CORS
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
+logging.getLogger("waitress").setLevel(logging.ERROR)
 
 # Initialize OKX Client
 client = OKXClient(
@@ -22,6 +26,14 @@ client = OKXClient(
 )
 
 state = StateManager(path=CONFIG["state_file"])
+_pnl_baseline_path = os.path.join(BASE_DIR, "data", "btc_pnl_baseline.json")
+pnl_ledger = (
+    BTCPnLLedger(
+        baseline_path=_pnl_baseline_path,
+        cache_path=os.path.join(os.path.dirname(CONFIG["state_file"]), "btc_pnl_ledger.json"),
+    )
+    if os.path.exists(_pnl_baseline_path) else None
+)
 
 @app.route('/')
 def root():
@@ -55,6 +67,7 @@ def get_status():
 
         # Calculate statistics from trade_history
         trade_history = state.get_trade_history()
+        all_trade_history = trade_history
         
         sd, ed = None, None
         if start_date_str or end_date_str:
@@ -97,46 +110,44 @@ def get_status():
             elif direction == "short":
                 cumulative_pnl_usdt += (ep - xp) * sz * ct_val
 
+        pnl_from_time = trade_history[-1].get("time") if trade_history else None
+        pnl_basis = "local_history"
+        pnl_as_of_time = None
+        pnl_provisional_usdt = 0.0
+        all_time_pnl = None
+        all_time_from = None
+        if pnl_ledger is not None:
+            summary = pnl_ledger.get_total(client, all_trade_history, ct_val)
+            all_time_pnl = summary["net_usdt"]
+            all_time_from = summary["from_time"]
+            if not start_date_str and not end_date_str:
+                cumulative_pnl_usdt = all_time_pnl
+                pnl_from_time = summary["from_time"]
+                pnl_as_of_time = summary["as_of_time"]
+                pnl_provisional_usdt = summary["provisional_usdt"]
+                pnl_basis = "okx_bills_with_local_gap" if pnl_provisional_usdt else "okx_bills"
+        elif not start_date_str and not end_date_str:
+            cumulative_pnl_usdt = None
+            pnl_basis = "unavailable"
+
+        # 与旧看板相同：由当前权益减去累计收益倒推本金，再按运行天数线性年化。
+        # 充值、转账及浮动盈亏会影响该估算，因此不能当作精确的资金加权收益率。
+        total_return_pct = None
+        annualized_return = None
+        if all_time_pnl is not None and all_time_from and account_info:
+            try:
+                equity = float(account_info["totalEq"])
+                inferred_initial = equity - all_time_pnl
+                elapsed_days = (datetime.now(timezone.utc) - datetime.fromisoformat(all_time_from)).total_seconds() / 86400
+                if equity > 0 and inferred_initial > 0 and elapsed_days > 0:
+                    total_return_pct = all_time_pnl / inferred_initial * 100
+                    annualized_return = total_return_pct / elapsed_days * 365
+            except (KeyError, ValueError, TypeError, OverflowError):
+                pass
+
         completed_long_trades = sum(1 for t in trade_history if t.get("direction") == "long")
         completed_short_trades = sum(1 for t in trade_history if t.get("direction") == "short")
 
-        # Calculate annualized return
-        annualized_return = 0
-        true_return_pct = cumulative_pnl_pct
-
-        try:
-            now_time = datetime.now(timezone(timedelta(hours=8)))
-            actual_sd = sd
-            
-            if not actual_sd:
-                if trade_history:
-                    oldest_trade = trade_history[-1]
-                    try:
-                        actual_sd = datetime.fromisoformat(oldest_trade["time"])
-                    except Exception:
-                        pass
-                
-                if not actual_sd:
-                    start_time_str = state.get("dashboard_start_time")
-                    if start_time_str:
-                        actual_sd = datetime.fromisoformat(start_time_str)
-
-            if actual_sd:
-                actual_ed = min(ed, now_time) if ed else now_time
-                days_elapsed = (actual_ed - actual_sd).total_seconds() / 86400.0
-                days_elapsed = max(days_elapsed, 1.0) # Assume at least 1 day has passed
-                current_eq = account_info.get("totalEq", 0) if account_info else 0
-                if current_eq > 0:
-                    starting_eq = current_eq - cumulative_pnl_usdt
-                    if starting_eq <= 0:
-                        starting_eq = current_eq
-                    true_return_pct = cumulative_pnl_usdt / starting_eq
-                    annualized_return = (true_return_pct / days_elapsed) * 365
-                else:
-                    annualized_return = (cumulative_pnl_pct / days_elapsed) * 365
-        except Exception:
-            pass
-            
         # Downsample equity history to a maximum of 2000 points for frontend performance
         equity_data = state.get_equity_data()
         equity_history = equity_data.get("equity_history", [])
@@ -163,8 +174,12 @@ def get_status():
                     "win_rate": win_rate,
                     "avg_pnl_pct": avg_pnl_pct,
                     "total_trades_history": total_trades,
-                    "cumulative_pnl_pct": true_return_pct,
+                    "cumulative_pnl_pct": total_return_pct if pnl_basis != "local_history" else None,
                     "cumulative_pnl_usdt": cumulative_pnl_usdt,
+                    "pnl_from_time": pnl_from_time,
+                    "pnl_as_of_time": pnl_as_of_time,
+                    "pnl_provisional_usdt": pnl_provisional_usdt,
+                    "pnl_basis": pnl_basis,
                     "annualized_return": annualized_return
                 },
                 "trade_history": trade_history[:50], # Send last 50 for UI
@@ -172,33 +187,56 @@ def get_status():
             }
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        app.logger.exception("获取看板状态失败")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
     """
     Return the last N lines of the log file
     """
-    lines = request.args.get('lines', default=50, type=int)
+    lines = max(1, min(request.args.get('lines', default=50, type=int), 200))
     log_path = os.path.join(BASE_DIR, CONFIG['log_dir'], "trader.log")
     
     if not os.path.exists(log_path):
         return jsonify({"success": True, "logs": ["No log file found."]})
     
     try:
-        with open(log_path, "r", encoding="utf-8") as f:
-            all_lines = f.readlines()
-            return jsonify({"success": True, "logs": all_lines[-lines:]})
+        with open(log_path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            position = f.tell()
+            tail = b""
+            while position > 0 and tail.count(b"\n") <= lines:
+                chunk_size = min(8192, position)
+                position -= chunk_size
+                f.seek(position)
+                tail = f.read(chunk_size) + tail
+            logs = [line.decode("utf-8", errors="replace") + "\n" for line in tail.splitlines()[-lines:]]
+            return jsonify({"success": True, "logs": logs})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        app.logger.exception("读取交易日志失败")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
     from waitress import serve
-    print("=====================================================")
-    print("🚀 QuantLive Dashboard Server Starting (Production Mode)...")
-    print(f"📂 Dashboard Path: {DASHBOARD_DIR}")
-    print("🌐 Access the dashboard at: http://你的公网IP:5000/")
-    print("🛑 Press Ctrl+C to stop the server cleanly.")
-    print("=====================================================\n")
-    # Waitress is a production-grade WSGI server for Windows
-    serve(app, host="0.0.0.0", port=5000)
+    logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    try:
+        serve(app, host="0.0.0.0", port=5000)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) != 10060:
+            raise
+
+        # Some Windows hosts cannot establish Waitress's internal loopback trigger.
+        # The standard-library WSGI server does not create that connection.
+        from wsgiref.simple_server import WSGIRequestHandler, make_server
+
+        class QuietRequestHandler(WSGIRequestHandler):
+            def log_message(self, format, *args):
+                pass
+
+        logging.error("Waitress 本机连接超时，改用单线程备用看板服务")
+        with make_server("0.0.0.0", 5000, app, handler_class=QuietRequestHandler) as server:
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass
