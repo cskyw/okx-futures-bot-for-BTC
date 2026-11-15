@@ -366,6 +366,7 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
     entries     = state.get("long_entries", [])
     new_entries = []
     acted = False
+    state_changed = False
 
     for i, entry in enumerate(entries):
         ep      = entry["price"]
@@ -513,12 +514,14 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
             if lev_pnl_pct >= CONFIG.get("tp2_active_pct", 0.20):
                 if not entry.get("tp2_active"):
                     logger.info(f"  [LONG TP2] 追踪止损已激活! 当前收益 {lev_pnl_pct*100:.2f}%")
+                    state_changed = True
                 entry["tp2_active"] = True
                 
             if entry.get("tp2_active", False):
                 if lev_pnl_pct > max_pnl:
                     entry["max_pnl_pct"] = lev_pnl_pct
                     max_pnl = lev_pnl_pct
+                    state_changed = True
                     
                 # 3. 追踪止损触发检查
                 trail_pct = CONFIG.get("tp2_trail_pct", 0.05)
@@ -546,7 +549,7 @@ def manage_long_entries(client: OKXClient, state: StateManager, price: float, po
         new_entries.append(entry)
 
     state.set("long_entries", new_entries)
-    if acted:
+    if acted or state_changed:
         state.save()
     return acted
 
@@ -556,6 +559,7 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
     entries     = state.get("short_entries", [])
     new_entries = []
     acted = False
+    state_changed = False
 
     for i, entry in enumerate(entries):
         ep      = entry["price"]
@@ -698,12 +702,14 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
             if lev_pnl_pct >= CONFIG.get("tp2_active_pct", 0.20):
                 if not entry.get("tp2_active"):
                     logger.info(f"  [SHORT TP2] 追踪止损已激活! 当前收益 {lev_pnl_pct*100:.2f}%")
+                    state_changed = True
                 entry["tp2_active"] = True
                 
             if entry.get("tp2_active", False):
                 if lev_pnl_pct > max_pnl:
                     entry["max_pnl_pct"] = lev_pnl_pct
                     max_pnl = lev_pnl_pct
+                    state_changed = True
                     
                 # 3. 追踪止损触发检查
                 trail_pct = CONFIG.get("tp2_trail_pct", 0.05)
@@ -731,7 +737,7 @@ def manage_short_entries(client: OKXClient, state: StateManager, price: float, p
         new_entries.append(entry)
 
     state.set("short_entries", new_entries)
-    if acted:
+    if acted or state_changed:
         state.save()
     return acted
 
@@ -911,7 +917,7 @@ def main():
     logger.info(f"  交易对 : {CONFIG['inst_id']}")
     logger.info(f"  杠杆   : {CONFIG['lever']}x ({CONFIG['td_mode']})")
     logger.info(f"  模式   : {mode}")
-    logger.info(f"  buy_pct: {CONFIG['buy_pct']*100:.0f}%  sl: {CONFIG['sl_pct']*100:.0f}%  tp1: {CONFIG['tp1_pct']*100:.1f}%")
+    logger.info(f"  fixed_open_sz: {CONFIG['fixed_open_sz']}张  sl: {CONFIG['sl_pct']*100:.0f}%  tp1: {CONFIG['tp1_pct']*100:.1f}%")
     logger.info("=" * 50)
 
     client = OKXClient(
