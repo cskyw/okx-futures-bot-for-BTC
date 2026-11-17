@@ -22,6 +22,7 @@ class RealizedPnLCurve:
         self.lock = threading.Lock()
         self.next_refresh = 0.0
         self.refreshing = False
+        self.last_error = None
         self.coverage_start_ms = None
         self.coverage_end_ms = None
         self.bills = {}
@@ -49,6 +50,8 @@ class RealizedPnLCurve:
             self.refresh(client)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             logger.warning("OKX 已实现收益账单查询失败，沿用已有曲线: %s", exc)
+            with self.lock:
+                self.last_error = str(exc)
         finally:
             with self.lock:
                 self.refreshing = False
@@ -96,6 +99,7 @@ class RealizedPnLCurve:
             self.bills = bills
             self.coverage_start_ms = start
             self.coverage_end_ms = now_ms
+            self.last_error = None
 
     def series(self, summary):
         """Reverse known bill changes from Total PnL, then replay in time order."""
@@ -103,8 +107,12 @@ class RealizedPnLCurve:
             start = self.coverage_start_ms
             end = self.coverage_end_ms
             bills = dict(self.bills)
+            refreshing = self.refreshing
+            last_error = self.last_error
         empty = {"ready": False, "history": [], "coverage_start": None,
-                 "as_of_time": None, "live_pnl": None}
+                 "as_of_time": None, "live_pnl": None,
+                 "status": "loading" if refreshing else ("query_failed" if last_error else "waiting"),
+                 "error": last_error}
         if start is None or end is None or summary is None:
             return empty
         as_of_time = summary["as_of_time"]
@@ -113,9 +121,7 @@ class RealizedPnLCurve:
         baseline_id = int(summary["baseline_bill_id"])
         # The two independent readers must agree on the latest booked bill.
         if latest_id > baseline_id and str(latest_id) not in bills:
-            return empty
-        if as_of_ms > end:
-            return empty
+            return {**empty, "status": "query_failed" if last_error else "syncing_latest_bill"}
         events = sorted((int(row["ts"]), int(bill_id), Decimal(row["amount"]))
                         for bill_id, row in bills.items()
                         if start < int(row["ts"]) <= as_of_ms and int(bill_id) <= latest_id)
@@ -132,4 +138,4 @@ class RealizedPnLCurve:
                      if summary["provisional_usdt"] else as_of_time)
         return {"ready": True, "history": history,
                 "coverage_start": history[0]["time"], "as_of_time": as_of_time,
-                "live_pnl": live, "live_time": live_time}
+                "live_pnl": live, "live_time": live_time, "status": "ready", "error": None}

@@ -63,9 +63,15 @@ async function fetchStatus() {
                 allEquityHistory = realized.history;
                 lastLivePnl = realized.live_pnl;
                 lastLivePnlTime = realized.live_time;
-                equityCoverageEl.textContent = realized.ready
-                    ? `BTC realized PnL after fees and funding; excludes transfers and open-position PnL. Bills available from ${new Date(realized.coverage_start).toLocaleDateString()}.`
-                    : 'Loading OKX trade bills. The realized PnL curve will appear shortly.';
+                if (realized.ready) {
+                    equityCoverageEl.textContent = `BTC realized PnL after fees and funding; excludes transfers and open-position PnL. Bills available from ${new Date(realized.coverage_start).toLocaleDateString()}.`;
+                } else if (realized.status === 'query_failed') {
+                    equityCoverageEl.textContent = 'OKX trade bill query failed. Check the dashboard server log; retrying in about one minute.';
+                } else if (realized.status === 'syncing_latest_bill') {
+                    equityCoverageEl.textContent = 'Waiting for the trade bill used by Total PnL; syncing again shortly.';
+                } else {
+                    equityCoverageEl.textContent = 'Loading OKX trade bills. The realized PnL curve will appear shortly.';
+                }
                 renderEquityChart();
             }
             

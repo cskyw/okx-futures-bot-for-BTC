@@ -16,6 +16,11 @@ class FakeClient:
         return {"data": self.rows}
 
 
+class FailedClient:
+    def _get(self, path, params):
+        return None
+
+
 class RealizedPnLCurveTests(unittest.TestCase):
     def test_replays_only_instrument_bills_and_ends_at_total_pnl(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -38,6 +43,9 @@ class RealizedPnLCurveTests(unittest.TestCase):
             self.assertEqual([item["pnl"] for item in result["history"]], [13, 18, 16])
             self.assertEqual(result["live_pnl"], 17)
             self.assertEqual(len(RealizedPnLCurve(str(Path(folder) / "curve.json"), "BTC-USDT-SWAP", "USDT").bills), 2)
+            # Exchange bill time may be slightly ahead of the server clock.
+            summary["as_of_time"] = datetime.fromtimestamp((now_ms + 60_000) / 1000, timezone.utc).isoformat()
+            self.assertTrue(curve.series(summary)["ready"])
 
     def test_waits_until_bill_cache_catches_total_pnl(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -48,6 +56,8 @@ class RealizedPnLCurveTests(unittest.TestCase):
                        "as_of_time": datetime.fromtimestamp(now_ms / 1000, timezone.utc).isoformat(),
                        "baseline_bill_id": "9", "last_bill_id": "12"}
             self.assertFalse(curve.series(summary)["ready"])
+            curve._worker(FailedClient())
+            self.assertEqual(curve.series(summary)["status"], "query_failed")
 
 
 if __name__ == "__main__":
