@@ -59,8 +59,10 @@ class RealizedPnLCurve:
     def refresh(self, client, now_ms=None):
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
         begin_ms = now_ms - WINDOW_SECONDS * 1000
+        # OKX returns rows nearest `begin` when it is supplied alone. Supplying
+        # both bounds starts at the newest rows, so `after` can page backward.
         params = {"instId": self.instrument, "ccy": self.currency,
-                  "begin": str(begin_ms), "limit": "100"}
+                  "begin": str(begin_ms), "end": str(now_ms), "limit": "100"}
         fetched = {}
         for _ in range(100):
             response = client._get("/api/v5/account/bills-archive", params)

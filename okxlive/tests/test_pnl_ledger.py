@@ -27,9 +27,11 @@ class FakeClient:
     def __init__(self, rows):
         self.rows = rows
         self.calls = 0
+        self.last_params = None
 
     def _get(self, path, params):
         self.calls += 1
+        self.last_params = dict(params)
         return {"data": self.rows}
 
 
@@ -40,6 +42,7 @@ class BTCPnLLedgerTests(unittest.TestCase):
             ledger = BTCPnLLedger(str(BASELINE), cache_path)
             no_bills = FakeClient([])
             provisional = ledger.get_total(no_bills, [LOCAL_TRADE, LOCAL_TP1], 0.01)
+            self.assertIn("end", no_bills.last_params)
             self.assertAlmostEqual(provisional["booked_usdt"], 16.49314581)
             self.assertAlmostEqual(provisional["provisional_usdt"], 0.50086)
             self.assertAlmostEqual(provisional["net_usdt"], 16.99400581)

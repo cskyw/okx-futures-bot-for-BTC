@@ -35,6 +35,7 @@ class RealizedPnLCurveTests(unittest.TestCase):
             client = FakeClient(rows)
             curve.refresh(client, now_ms=now_ms)
             self.assertEqual(client.calls[0][1]["instId"], "BTC-USDT-SWAP")
+            self.assertEqual(client.calls[0][1]["end"], str(now_ms))
             summary = {"booked_usdt": 16, "net_usdt": 17, "provisional_usdt": 1,
                        "as_of_time": datetime.fromtimestamp(now_ms / 1000, timezone.utc).isoformat(),
                        "baseline_bill_id": "9", "last_bill_id": "12"}

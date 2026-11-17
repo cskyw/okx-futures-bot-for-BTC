@@ -43,6 +43,7 @@ class BTCPnLLedger:
             "instId": self.baseline["instrument"],
             "ccy": self.baseline["currency"],
             "begin": str(begin_ms),
+            "end": str(int(time.time() * 1000)),
             "limit": "100",
         }
         new_bills = []
