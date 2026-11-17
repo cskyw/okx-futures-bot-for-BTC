@@ -18,6 +18,8 @@ class DashboardStateReaderTests(unittest.TestCase):
 
             reader = DashboardStateReader(str(state_path))
             self.assertEqual(reader.get_trade_history(), [{"id": 1}])
+            with patch("dashboard_state.json.load", side_effect=AssertionError("unchanged file was parsed")):
+                reader.reload()
 
             history_path.write_text("[", encoding="utf-8")
             with patch("dashboard_state.logger.error") as log_error:

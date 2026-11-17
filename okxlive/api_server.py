@@ -1,5 +1,7 @@
 import os
 import logging
+import threading
+from functools import wraps
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from flask import Flask, jsonify, request, redirect, send_from_directory
@@ -16,6 +18,19 @@ DASHBOARD_DIR = os.path.join(BASE_DIR, "dashboard")
 
 app = Flask(__name__, static_folder=DASHBOARD_DIR)
 CORS(app)  # Enable CORS
+_status_slots = threading.BoundedSemaphore(2)
+
+
+def limit_status_requests(handler):
+    @wraps(handler)
+    def wrapped(*args, **kwargs):
+        if not _status_slots.acquire(blocking=False):
+            return jsonify({"success": False, "error": "看板状态请求繁忙，请稍后重试"}), 503
+        try:
+            return handler(*args, **kwargs)
+        finally:
+            _status_slots.release()
+    return wrapped
 
 
 class QuietRequestHandler(WSGIRequestHandler):
@@ -27,6 +42,31 @@ class ThreadedWSGIServer(ThreadingMixIn, WSGIServer):
     daemon_threads = True
     block_on_close = False
     request_queue_size = 16
+    max_workers = 3
+
+    def __init__(self, *args, **kwargs):
+        self._worker_slots = threading.BoundedSemaphore(self.max_workers)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self._worker_slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._worker_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._worker_slots.release()
 
 
 def create_dashboard_server(host="0.0.0.0", port=5000):
@@ -67,6 +107,7 @@ def serve_dashboard(filename):
     return send_from_directory(DASHBOARD_DIR, filename)
 
 @app.route('/api/status', methods=['GET'])
+@limit_status_requests
 def get_status():
     """
     Fetch real-time data from OKX API and merge with local strategy metadata

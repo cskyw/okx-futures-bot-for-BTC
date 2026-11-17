@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import threading
 import time
 
 
@@ -17,16 +18,26 @@ class DashboardStateReader:
         self._history = []
         self._equity = {"equity_history": []}
         self._failed_paths = set()
+        self._signatures = {}
+        self._reload_lock = threading.Lock()
         self.reload()
 
     def _read(self, path: str, expected_type: type, previous):
         for attempt in range(3):
             try:
+                before = os.stat(path)
+                signature = (before.st_mtime_ns, before.st_size)
+                if self._signatures.get(path) == signature:
+                    return previous
                 with open(path, encoding="utf-8") as file:
                     value = json.load(file)
+                after = os.stat(path)
+                if (after.st_mtime_ns, after.st_size) != signature:
+                    raise ValueError("file changed during read")
                 if not isinstance(value, expected_type):
                     raise ValueError(f"expected {expected_type.__name__}")
                 self._failed_paths.discard(path)
+                self._signatures[path] = signature
                 return value
             except FileNotFoundError:
                 return previous
@@ -39,8 +50,9 @@ class DashboardStateReader:
         return previous
 
     def reload(self):
-        self._history = self._read(self.history_path, list, self._history)
-        self._equity = self._read(self.equity_path, dict, self._equity)
+        with self._reload_lock:
+            self._history = self._read(self.history_path, list, self._history)
+            self._equity = self._read(self.equity_path, dict, self._equity)
 
     def get_trade_history(self) -> list:
         return self._history
