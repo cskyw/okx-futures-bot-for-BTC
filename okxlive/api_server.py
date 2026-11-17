@@ -1,10 +1,12 @@
 import os
 import logging
+from socketserver import ThreadingMixIn
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from flask import Flask, jsonify, request, redirect, send_from_directory
 from flask_cors import CORS
 from okx_client import OKXClient
 from config import CONFIG
-from state_manager import StateManager
+from dashboard_state import DashboardStateReader
 from pnl_ledger import BTCPnLLedger
 from datetime import datetime, timezone, timedelta
 
@@ -14,8 +16,23 @@ DASHBOARD_DIR = os.path.join(BASE_DIR, "dashboard")
 
 app = Flask(__name__, static_folder=DASHBOARD_DIR)
 CORS(app)  # Enable CORS
-logging.getLogger("werkzeug").setLevel(logging.ERROR)
-logging.getLogger("waitress").setLevel(logging.ERROR)
+
+
+class QuietRequestHandler(WSGIRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
+
+class ThreadedWSGIServer(ThreadingMixIn, WSGIServer):
+    daemon_threads = True
+    block_on_close = False
+    request_queue_size = 16
+
+
+def create_dashboard_server(host="0.0.0.0", port=5000):
+    return make_server(host, port, app,
+                       server_class=ThreadedWSGIServer,
+                       handler_class=QuietRequestHandler)
 
 # Initialize OKX Client
 client = OKXClient(
@@ -25,7 +42,7 @@ client = OKXClient(
     simulated=CONFIG.get("simulated", False)
 )
 
-state = StateManager(path=CONFIG["state_file"])
+state = DashboardStateReader(state_path=CONFIG["state_file"])
 _pnl_baseline_path = os.path.join(BASE_DIR, "data", "btc_pnl_baseline.json")
 pnl_ledger = (
     BTCPnLLedger(
@@ -38,6 +55,12 @@ pnl_ledger = (
 @app.route('/')
 def root():
     return redirect('/dashboard/index.html')
+
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    """Local server health independent of OKX availability."""
+    return jsonify({"success": True})
 
 @app.route('/dashboard/<path:filename>')
 def serve_dashboard(filename):
@@ -218,25 +241,10 @@ def get_logs():
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
-    from waitress import serve
     logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    try:
-        serve(app, host="0.0.0.0", port=5000)
-    except OSError as exc:
-        if getattr(exc, "winerror", None) != 10060:
-            raise
-
-        # Some Windows hosts cannot establish Waitress's internal loopback trigger.
-        # The standard-library WSGI server does not create that connection.
-        from wsgiref.simple_server import WSGIRequestHandler, make_server
-
-        class QuietRequestHandler(WSGIRequestHandler):
-            def log_message(self, format, *args):
-                pass
-
-        logging.error("Waitress 本机连接超时，改用单线程备用看板服务")
-        with make_server("0.0.0.0", 5000, app, handler_class=QuietRequestHandler) as server:
-            try:
-                server.serve_forever()
-            except KeyboardInterrupt:
-                pass
+    with create_dashboard_server() as server:
+        print("看板服务已启动，监听端口 5000", flush=True)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
