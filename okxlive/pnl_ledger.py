@@ -117,4 +117,6 @@ class BTCPnLLedger:
                 "provisional_usdt": float(provisional),
                 "from_time": self.baseline["from_time"],
                 "as_of_time": self.snapshot["as_of_time"],
+                "baseline_bill_id": self.baseline["last_bill_id"],
+                "last_bill_id": self.snapshot["last_bill_id"],
             }

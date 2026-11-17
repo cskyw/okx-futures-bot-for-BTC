@@ -10,6 +10,7 @@ from okx_client import OKXClient
 from config import CONFIG
 from dashboard_state import DashboardStateReader
 from pnl_ledger import BTCPnLLedger
+from realized_pnl_curve import RealizedPnLCurve
 from datetime import datetime, timezone, timedelta
 
 # Use absolute paths so it works reliably on a server regardless of the current working directory
@@ -83,6 +84,9 @@ client = OKXClient(
 )
 
 state = DashboardStateReader(state_path=CONFIG["state_file"])
+realized_curve = RealizedPnLCurve(
+    os.path.join(os.path.dirname(CONFIG["state_file"]), "realized_pnl_curve.json"),
+    CONFIG["inst_id"], CONFIG["quote_ccy"])
 _pnl_baseline_path = os.path.join(BASE_DIR, "data", "btc_pnl_baseline.json")
 pnl_ledger = (
     BTCPnLLedger(
@@ -180,6 +184,7 @@ def get_status():
         pnl_provisional_usdt = 0.0
         all_time_pnl = None
         all_time_from = None
+        summary = None
         if pnl_ledger is not None:
             summary = pnl_ledger.get_total(client, all_trade_history, ct_val)
             all_time_pnl = summary["net_usdt"]
@@ -212,17 +217,17 @@ def get_status():
         completed_long_trades = sum(1 for t in trade_history if t.get("direction") == "long")
         completed_short_trades = sum(1 for t in trade_history if t.get("direction") == "short")
 
-        # Downsample equity history to a maximum of 2000 points for frontend performance
-        equity_data = state.get_equity_data()
-        equity_history = equity_data.get("equity_history", [])
+        if summary is not None:
+            realized_curve.refresh_async(client)
+        realized_pnl = realized_curve.series(summary)
         max_points = 2000
-        if len(equity_history) > max_points:
-            step = len(equity_history) / max_points
-            downsampled = [equity_history[int(i * step)] for i in range(max_points)]
-            # Ensure the very latest recorded point is always included
-            if downsampled[-1] != equity_history[-1]:
-                downsampled.append(equity_history[-1])
-            equity_history = downsampled
+        pnl_history = realized_pnl["history"]
+        if len(pnl_history) > max_points:
+            step = len(pnl_history) / max_points
+            reduced = [pnl_history[int(i * step)] for i in range(max_points)]
+            if reduced[-1] != pnl_history[-1]:
+                reduced.append(pnl_history[-1])
+            realized_pnl["history"] = reduced
 
         return jsonify({
             "success": True,
@@ -247,7 +252,7 @@ def get_status():
                     "annualized_return": annualized_return
                 },
                 "trade_history": trade_history[:50], # Send last 50 for UI
-                "equity_history": equity_history
+                "realized_pnl_curve": realized_pnl
             }
         })
     except Exception as e:

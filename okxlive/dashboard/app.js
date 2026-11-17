@@ -18,6 +18,7 @@ const positionsBodyEl = document.getElementById('positionsBody');
 const tradesBodyEl = document.getElementById('tradesBody');
 const logTerminalEl = document.getElementById('logTerminal');
 const pulseDot = document.querySelector('.pulse-dot');
+const equityCoverageEl = document.getElementById('equityCoverage');
 
 const filterStartEl = document.getElementById('filterStart');
 const filterEndEl = document.getElementById('filterEnd');
@@ -29,7 +30,8 @@ let lastLogCount = 0;
 let equityChart = null;  // Chart.js instance
 let chartRangeDays = 0;  // 0 = ALL, 7 = 7D, 30 = 30D, 90 = 90D
 let allEquityHistory = [];  // full cache of raw history from API
-let lastLiveEq = 0;
+let lastLivePnl = null;
+let lastLivePnlTime = null;
 let statusLoading = false;
 let logsLoading = false;
 
@@ -56,10 +58,14 @@ async function fetchStatus() {
             updatePositions(data.data.positions);
             if (data.data.trade_history) updateTrades(data.data.trade_history);
             
-            const liveEq = data.data.account ? data.data.account.totalEq : 0;
-            if (data.data.equity_history) {
-                allEquityHistory = data.data.equity_history;  // cache full data
-                lastLiveEq = liveEq;
+            const realized = data.data.realized_pnl_curve;
+            if (realized) {
+                allEquityHistory = realized.history;
+                lastLivePnl = realized.live_pnl;
+                lastLivePnlTime = realized.live_time;
+                equityCoverageEl.textContent = realized.ready
+                    ? `BTC realized PnL after fees and funding; excludes transfers and open-position PnL. Bills available from ${new Date(realized.coverage_start).toLocaleDateString()}.`
+                    : 'Loading OKX trade bills. The realized PnL curve will appear shortly.';
                 renderEquityChart();
             }
             
@@ -269,7 +275,7 @@ function initChart() {
         data: {
             labels: [],
             datasets: [{
-                label: 'Account Equity (USDT)',
+                label: 'Realized PnL (USDT)',
                 data: [],
                 borderColor: '#00e676',
                 backgroundColor: 'rgba(0, 230, 118, 0.08)',
@@ -341,20 +347,20 @@ function renderEquityChart() {
             label = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
         }
         labels.push(label);
-        values.push(parseFloat(item.equity));
+        values.push(parseFloat(item.pnl));
     });
     
-    // Add current live tick
-    if (lastLiveEq && parseFloat(lastLiveEq) > 0) {
-        const now = new Date();
+    // Match the terminal point to the Total PnL card's booked/provisional value.
+    if (lastLivePnl !== null && Number.isFinite(Number(lastLivePnl)) && lastLivePnlTime) {
+        const now = new Date(lastLivePnlTime);
         const label = chartRangeDays > 7
             ? `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}`
             : `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
         if (labels.length === 0 || labels[labels.length - 1] !== label) {
             labels.push(label);
-            values.push(parseFloat(lastLiveEq));
+            values.push(parseFloat(lastLivePnl));
         } else {
-            values[values.length - 1] = parseFloat(lastLiveEq);
+            values[values.length - 1] = parseFloat(lastLivePnl);
         }
     }
     
