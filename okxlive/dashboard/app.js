@@ -289,7 +289,8 @@ function initChart() {
                 pointRadius: 3,
                 pointBackgroundColor: '#00e676',
                 pointBorderColor: 'transparent',
-                tension: 0.3,
+                stepped: 'after',
+                tension: 0,
                 fill: true,
             }]
         },
@@ -297,7 +298,7 @@ function initChart() {
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 400 },
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'nearest', intersect: false },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -307,14 +308,25 @@ function initChart() {
                     borderColor: 'rgba(0,230,118,0.3)',
                     borderWidth: 1,
                     callbacks: {
+                        title: items => items.length ? new Date(items[0].parsed.x).toLocaleString() : '',
                         label: ctx => ` ${ctx.parsed.y.toFixed(4)} USDT`
                     }
                 }
             },
             scales: {
                 x: {
+                    type: 'linear',
                     grid: { color: 'rgba(42, 46, 57, 0.5)' },
-                    ticks: { color: '#8892b0', maxTicksLimit: 8, maxRotation: 0 }
+                    ticks: {
+                        color: '#8892b0', maxTicksLimit: 8, maxRotation: 0,
+                        callback: value => {
+                            const d = new Date(value);
+                            const date = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+                            return chartRangeDays > 0 && chartRangeDays <= 7
+                                ? `${date} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
+                                : date;
+                        }
+                    }
                 },
                 y: {
                     grid: { color: 'rgba(42, 46, 57, 0.5)' },
@@ -340,38 +352,26 @@ function renderEquityChart() {
         history = history.filter(item => new Date(item.time).getTime() >= cutoff);
     }
     
-    const labels = [];
-    const values = [];
+    const points = [];
     
     history.forEach(item => {
-        const d = new Date(item.time);
-        // For ranges > 7 days, show only date; otherwise show date + time
-        let label;
-        if (chartRangeDays > 7) {
-            label = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
-        } else {
-            label = `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-        }
-        labels.push(label);
-        values.push(parseFloat(item.pnl));
+        const x = new Date(item.time).getTime();
+        const y = Number(item.pnl);
+        if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
     });
     
     // Match the terminal point to the Total PnL card's booked/provisional value.
     if (lastLivePnl !== null && Number.isFinite(Number(lastLivePnl)) && lastLivePnlTime) {
-        const now = new Date(lastLivePnlTime);
-        const label = chartRangeDays > 7
-            ? `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}`
-            : `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-        if (labels.length === 0 || labels[labels.length - 1] !== label) {
-            labels.push(label);
-            values.push(parseFloat(lastLivePnl));
+        const x = new Date(lastLivePnlTime).getTime();
+        const y = Number(lastLivePnl);
+        if (points.length === 0 || points[points.length - 1].x !== x) {
+            points.push({ x, y });
         } else {
-            values[values.length - 1] = parseFloat(lastLivePnl);
+            points[points.length - 1].y = y;
         }
     }
     
-    equityChart.data.labels = labels;
-    equityChart.data.datasets[0].data = values;
+    equityChart.data.datasets[0].data = points;
     equityChart.update('none');
 }
 
