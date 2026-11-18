@@ -5,7 +5,7 @@ An automated OKX BTC-USDT perpetual-swap bot based on moving-average signals. It
 ## Project structure
 
 ```text
-okxlive/
+okx-futures-bot-for-BTC/
 ├── live_trader.py       # Trading engine
 ├── okx_client.py        # OKX API client
 ├── strategy_engine.py   # Moving-average signals
@@ -49,13 +49,13 @@ okxlive/
 
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip
-cd okxlive
+cd okx-futures-bot-for-BTC
 pip3 install -r requirements.txt
 ```
 
 ### 3. Configure credentials and strategy
 
-Create `okxlive/.env` with your OKX credentials:
+Create `.env` in the repository root with your OKX credentials:
 
 ```dotenv
 OKX_API_KEY=your-api-key
@@ -87,8 +87,8 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/okxlive
-ExecStart=/usr/bin/python3 /home/ubuntu/okxlive/live_trader.py
+WorkingDirectory=/home/ubuntu/okx-futures-bot-for-BTC
+ExecStart=/usr/bin/python3 /home/ubuntu/okx-futures-bot-for-BTC/live_trader.py
 Restart=always
 RestartSec=15
 
