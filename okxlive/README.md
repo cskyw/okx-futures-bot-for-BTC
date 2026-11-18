@@ -1,96 +1,83 @@
-# OKX 合约实盘交易程序
+# OKX BTC Futures Trading Bot
 
-基于双均线交叉策略的 OKX 永续合约自动交易程序，配套 Web 数据看板，支持模拟盘/实盘切换。
+An automated OKX BTC-USDT perpetual-swap bot based on moving-average signals. It includes a web dashboard and supports demo and live trading.
 
-## 目录结构
+## Project structure
 
-```
-okx_live/
-├── live_trader.py       # 主程序（交易引擎入口）
-├── okx_client.py        # OKX API 封装
-├── strategy_engine.py   # 均线量化信号引擎
-├── state_manager.py     # 持仓与历史记录本地持久化
-├── api_server.py        # Flask API 服务（供前端看板读取数据）
-├── dashboard/           # Web 前端（Glassmorphism 风格数据看板）
-├── config.py            # 配置文件（填入你的 API 信息和策略参数）
+```text
+okxlive/
+├── live_trader.py       # Trading engine
+├── okx_client.py        # OKX API client
+├── strategy_engine.py   # Moving-average signals
+├── state_manager.py     # Position and trade-history persistence
+├── api_server.py        # Dashboard API server
+├── dashboard/           # Web dashboard
+├── config.py            # API and strategy settings
 ├── requirements.txt
-├── logs/                # 运行日志（自动创建）
-└── state/               # 数据存储（自动创建）
-    ├── trader_state.json   # 实时持仓信息
-    ├── trade_history.json  # 历史交割记录（胜率/年化计算数据来源）
-    └── equity_history.json # 原始总权益快照（每 12 小时记录一次；不用于已实现收益曲线）
+├── logs/                # Runtime logs
+└── state/               # Runtime data
+    ├── trader_state.json   # Current positions
+    ├── trade_history.json  # Closed trades
+    └── equity_history.json # Raw equity snapshots
 ```
 
----
+## Features
 
-## 核心特性
+**Trading**
 
-**策略执行**
-- 10 秒高频巡航 + 整点详情播报，兼顾追踪止损响应速度与终端可读性
-- TP1 半仓止盈采用“开仓后独立挂单”策略，并针对单笔仓位订单号进行精准状态追踪，不受多笔同向持仓或滑点影响。
-- 止盈止损自动联动：若仓位触发初始止损，程序会自动捕捉并撤销其残留的 TP1 限价单，防止幽灵挂单。
-- 终端输出现货涨跌幅，底层追踪止损按杠杆后真实盈亏执行
+- Checks the market every 10 seconds and prints a detailed hourly status report.
+- Places a separate TP1 order after an entry fills and tracks it by entry order ID.
+- Cancels a remaining TP1 order if the initial stop closes the position.
+- Shows underlying price changes in the terminal while applying trailing-stop rules to leveraged returns.
 
-**数据看板**
-- 实时展示胜率、总收益率、动态年化收益率
-- 历史平仓订单流水，标注每笔交易的平仓原因（硬止盈/追踪止损/手动平仓等）
-- 自定义日期过滤器，任意时间段的统计数据秒级响应
-- 持仓、流水、原始总权益快照独立存储并使用绝对路径读取；已实现收益曲线由 OKX 交易账单构建
+**Dashboard**
 
----
+- Shows win rate, total PnL, and an estimated annualized return.
+- Lists closed trades with exit reasons and supports date filtering.
+- Stores positions, trade history, and raw equity snapshots separately. The realized PnL chart is built from OKX bills.
 
-## 部署步骤
+## Setup
 
-### 1. OKX 账户前置设置
+### 1. Prepare your OKX account
 
-| 步骤 | 操作 |
-|------|------|
-| 1 | 划转资金到合约账户 |
-| 2 | 持仓模式改为双向持仓（交易设置 → 持仓模式） |
-| 3 | 创建 API Key，开启读取 + 交易权限，无需提币权限 |
-| 4 | 若服务器 IP 固定，建议在 API 中绑定 IP 白名单 |
+1. Transfer funds to the account used for perpetual-swap trading.
+2. Enable long/short (hedge) position mode in OKX trading settings.
+3. Create an API key with read and trade permissions. Withdrawal permission is unnecessary.
+4. If your server has a fixed IP address, consider restricting the API key to that IP.
 
-### 2. 安装依赖
+### 2. Install dependencies
 
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip
-cd okx_live
+cd okxlive
 pip3 install -r requirements.txt
 ```
 
-### 3. 填写配置
+### 3. Configure credentials and strategy
 
-编辑 `config.py`，填入你的 OKX API 信息：
+Create `okxlive/.env` with your OKX credentials:
 
-```python
-"api_key":    "你的 API Key",
-"secret_key": "你的 Secret Key",
-"passphrase": "你的 Passphrase",
-"simulated":  True,    # 先模拟盘测试，确认无误后改为 False
-"lever":      5,       # 杠杆倍数
+```dotenv
+OKX_API_KEY=your-api-key
+OKX_SECRET_KEY=your-secret-key
+OKX_PASSPHRASE=your-passphrase
 ```
 
-其余策略参数（止盈止损比例、开仓仓位等）也在 `config.py` 中，根据自己的风险偏好调整。
+`config.py` loads these variables. Review its strategy settings before running the bot. Its current default is `"simulated": False`, which enables **live trading**. Set it to `True` for a demo run, then switch it back only when you intend to place real orders. Adjust leverage, position size, take-profit, and stop-loss settings for your account.
 
-### 4. 模拟盘测试
+### 4. Test in demo mode
+
+With `"simulated": True` in `config.py`, run:
 
 ```bash
 python3 live_trader.py
 ```
 
-观察日志确认以下项目正常：
-- K 线拉取成功
-- 杠杆设置成功
-- 信号与价格正确打印
-- 下单逻辑无报错
+Check the logs for successful candle retrieval, leverage setup, signal and price output, and order handling.
 
-### 5. 切换实盘 + 后台运行
+### 5. Run as a service
 
-将 `config.py` 中 `"simulated"` 改为 `False`，然后创建 systemd 服务：
-
-```bash
-sudo nano /etc/systemd/system/okx-trader.service
-```
+After testing, set `"simulated": False` if you intend to trade live. For example, create `/etc/systemd/system/okx-trader.service`:
 
 ```ini
 [Unit]
@@ -100,8 +87,8 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/okx_live
-ExecStart=/usr/bin/python3 /home/ubuntu/okx_live/live_trader.py
+WorkingDirectory=/home/ubuntu/okxlive
+ExecStart=/usr/bin/python3 /home/ubuntu/okxlive/live_trader.py
 Restart=always
 RestartSec=15
 
@@ -109,121 +96,73 @@ RestartSec=15
 WantedBy=multi-user.target
 ```
 
+Adjust the user, paths, and Python executable for your server, then run:
+
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable okx-trader
-sudo systemctl start okx-trader
-
-# 查看状态
+sudo systemctl enable --now okx-trader
 sudo systemctl status okx-trader
-
-# 实时日志
 tail -f logs/trader.log
 ```
 
----
+## Strategy
 
-## 交易策略说明
+### Signals
 
-### 信号生成（基于 1 小时 K 线）
+The strategy uses hourly candles and three moving averages: MA5 (fast), MA10 (slow), and MA120 (trend). A long signal requires price to cross above MA5 and MA10 while staying above MA120. A short signal requires the opposite conditions.
 
-计算三条移动平均线：
+### Entry orders and size
 
-- MA5（快线）：5 周期均线
-- MA10（慢线）：10 周期均线
-- MA120（趋势线）：120 周期牛熊分界
+Entries use limit orders. For a long, the limit price is the current price multiplied by `(1 - limit_offset)`; for a short, it is multiplied by `(1 + limit_offset)`. The default `limit_offset` is `0.0002` (0.02%). A larger offset can make fills less likely; a smaller one can make an order more likely to execute as a taker.
 
-开仓条件（需同时满足）：
-- 做多：价格向上突破 MA5 和 MA10，且价格高于 MA120
-- 做空：价格向下突破 MA5 和 MA10，且价格低于 MA120
+`fixed_open_sz` controls contracts per entry and defaults to `0.02`. For BTC-USDT-SWAP, one contract represents `0.01 BTC`, so `0.02` contracts represent `0.0002 BTC`. Review OKX's current order-size rules before placing an order.
 
-### 开仓下单方式
+### Exits
 
-程序采用**限价单**开仓（非市价单），以减少滑点和 Taker 手续费。下单价格在当前市价基础上加一个微小偏移量：
+1. **Initial stop-loss:** `sl_pct` defaults to `0.13`, or a 13% adverse price move. This is a last-resort stop, not a 13% loss on margin.
+2. **TP1:** After the entry fills, the bot places a separate limit take-profit order for half the position at a 3% favorable price move (`tp1_pct`). Once it executes, the local stop for the remainder moves to the entry price.
+3. **TP2 trailing stop:** It activates at a 20% leveraged return (`tp2_active_pct`) and closes the remainder at market after a 5% pullback from the peak return (`tp2_trail_pct`).
 
-- 做多时：限价 = 当前价 × (1 - `limit_offset`)
-- 做空时：限价 = 当前价 × (1 + `limit_offset`)
+With 5× leverage, a 1% price move corresponds to approximately a 5% change in margin PnL before fees and funding. The 13% stop could therefore mean approximately a 65% loss of the margin allocated to that position. Liquidation and execution behavior can differ from this estimate.
 
-`limit_offset` 默认 `0.0002`（即 0.02%），数值越大离实际价格的偏差量会更大，挂单可能更难成交；数值过小则接近市价单，手续费更高。
+## Web dashboard
 
-### 开仓张数
+The dashboard in `dashboard/` reads trading state through `api_server.py`. Its threaded server handles up to three concurrent requests, including up to two state requests. It reparses state files only when they change and keeps the last valid JSON snapshot if a file is temporarily incomplete during a write.
 
-程序采用**固定张数**开仓（全仓模式下不需要按保证金比例计算）。每次开仓的合约张数由 `config.py` 中的 `fixed_open_sz` 参数控制，默认 `0.02` 张（即 0.0002 BTC，OKX BTC-USDT-SWAP 最小下单单位为 0.01 张）。
-
-根据自己的仓位大小调整这个数值即可。
-
-### 阶梯式止盈止损
-
-1. **初始止损（SL）**：开仓时附带 13%（`sl_pct`）保底止损单，价格反向 13% 触发平仓。
-2. **TP1 半仓止盈 + 保本**：开仓单完全成交后，程序立刻向交易所发出一笔精准涨幅 3%（`tp1_pct`）的限价条件止盈单（平半仓）。交易所执行该单后，程序本地会将剩余一半仓位的止损线移至开仓均价。
-3. **TP2 动态追踪止损**：
-   - 杠杆收益率达 20%（`tp2_active_pct`）时激活追踪止损
-   - 从最高收益回撤 5%（`tp2_trail_pct`）时市价全平
-
----
-
-## 风险说明
-
-| 参数 | 值 | 说明 |
-|------|----|------|
-| 杠杆 | 5x | 价格波动 1% = 保证金盈亏 5% |
-| sl_pct | 13% | 价格反向 13% 止损，5 倍杠杆下约损失 65% 单笔保证金 |
-| fixed_open_sz | 0.02 | 每次固定开仓 0.02 张，根据自己仓位调整 |
-| limit_offset | 0.0002 | 限价单偏移量，0.02% |
-
----
-
-## 常见问题
-
-**Q: 提示"杠杆设置失败"？**
-检查账户是否开启双向持仓模式，以及 API 权限是否包含"交易"。
-
-**Q: 下单提示 Margin 不足？**
-减小 `fixed_open_sz` 或 `lever`，或往合约账户划入更多资金。
-
-**Q: 程序重启后仓位状态如何？**
-持仓状态自动从 `state/trader_state.json` 恢复。建议重启后手动核对 OKX 实际持仓与 state 文件是否一致。
-
----
-
-## Web 数据看板（内置前端）
-
-本项目自带一套轻量级的网页前端（位于 `dashboard/` 目录），无需安装任何前端框架，直接通过 `api_server.py` 提供的 HTTP 接口即可在浏览器中实时查看交易状态。服务使用 Python 标准库的多线程 WSGI 服务器，最多同时处理 3 个请求，其中最多 2 个状态请求，不依赖 Waitress；日常请求不打印访问日志，只打印错误。看板只读交易状态，仅在文件变化时重新解析；遇到写入中的不完整 JSON 会暂用上次有效数据，不会退出服务。
-
-### 启动看板
+Start it after the trader is running:
 
 ```bash
-# 确保 live_trader.py 已在后台运行后，启动 API 服务：
 python3 api_server.py
-
-# 浏览器访问（默认端口 5000）
-http://你的服务器IP:5000
 ```
 
-若页面数据加载缓慢，可访问 `http://你的服务器IP:5000/api/health` 检查看板服务是否仍在运行；该接口不请求 OKX。
+Open `http://your-server-ip:5000`. Use `http://your-server-ip:5000/api/health` to check whether the service responds; that endpoint does not contact OKX.
 
-### 看板功能一览
+| Module | Details |
+| --- | --- |
+| Account overview | Total equity and available margin. |
+| Open positions | Long and short positions, average entry prices, unrealized PnL, and leverage from OKX. |
+| Realized PnL chart | Cumulative BTC-USDT-SWAP USDT-account bill PnL, including fees and funding but excluding unrealized PnL and transfers. Bills refresh every minute and are cached in `state/realized_pnl_curve.json`. Online bills cover roughly the latest three months; the chart offers ALL, 7D, 30D, and 90D views. Recent unbilled closes use a temporary local estimate at the end of the chart. |
+| Summary metrics | Total PnL combines `data/btc_pnl_baseline.json`, local closed trades, and later OKX bills. The baseline compensates for older history previously limited to 200 trades. Annualized return estimates starting capital from current equity and cumulative PnL, then scales linearly by days run; deposits, transfers, and unrealized PnL can affect it. |
+| Closed trades | All subsequent closes remain in `state/trade_history.json`; the table shows the latest 50, newest first, including direction, size, prices, leveraged return, and exit reason. |
+| Date filter | Filters locally available closed trades. Older records removed by the previous 200-trade limit cannot be recovered individually. Filtered amounts do not deduct fees. |
+| Log terminal | Shows the latest 70 lines of `trader.log`. |
 
-| 模块 | 说明 |
-|------|------|
-| **账户总览** | 实时显示总权益、可用保证金 |
-| **实时持仓** | 直连 OKX API，展示当前多/空持仓均价、浮盈亏、杠杆倍数 |
-| **已实现收益曲线** | 使用与 Total PnL 相同的 BTC-USDT-SWAP、USDT 交易账户账单，按账单时间累计已实现盈亏、手续费和资金费，不使用 `totalEq`，因此不含持仓浮盈亏和人工划转。曲线按真实时间绘制阶梯线，末端与 Total PnL 一致；近期未入账的平仓在末端沿用 Total PnL 的本地临时估算。账单每分钟后台刷新并缓存于 `state/realized_pnl_curve.json`。在线账单覆盖最近三个月，支持 ALL / 7D / 30D / 90D。 |
-| **统计指标** | Total PnL 使用 `data/btc_pnl_baseline.json` 补齐旧版只保存 200 笔时丢失的 BTC 历史，之后结合本地逐笔平仓记录和 OKX 账单增量更新；账单包含手续费和资金费，未入账的近期平仓由本地记录临时估算。`state/trade_history.json` 从新版起不再截断，完整保留之后的逐笔记录。年化收益沿用旧看板口径：当前权益减累计 PnL 倒推本金，再按运行天数线性年化；充值、转账及未平仓浮盈亏会影响该估算。 |
-| **历史平仓记录** | 本地保存全部后续平仓记录；看板表格为保持轻量，只按时间倒序展示最近 50 笔，标注方向、张数、开仓价、平仓价、杠杆收益率及平仓原因 |
-| **日期过滤器** | 可筛选本地现存的全部逐笔平仓记录；旧版已截断的记录无法逐笔恢复，因此历史筛选结果只覆盖仍在本地的记录，且筛选后的金额未扣费用。 |
-| **系统日志终端** | 实时滚动展示 `trader.log` 的最新 70 行日志，方便远程运维 |
+The older `state/equity_history.json` snapshots remain on the running machine but are no longer used for the realized PnL chart or committed to the repository.
 
-旧的 `state/equity_history.json` 原始权益快照继续保留在运行机器上，但不再作为收益曲线的数据源，也不再提交到仓库。
+If port 5000 is blocked, update your firewall rules. To access the dashboard without exposing that port publicly, use an SSH tunnel:
 
-> **提示**：如服务器有防火墙，需开放 `5000` 端口（TCP）。若不希望公网暴露，可通过 SSH 隧道在本地访问：
-> ```bash
-> ssh -L 5000:localhost:5000 user@your-server-ip
-> # 然后在本地浏览器访问 http://localhost:5000
-> ```
+```bash
+ssh -L 5000:localhost:5000 user@your-server-ip
+```
 
----
+Then open `http://localhost:5000` locally.
 
-## 免责声明
+## Troubleshooting
 
-本项目仅供学习与研究使用。加密货币合约交易风险极高，使用本程序造成的任何资金损失，作者概不负责。请在充分理解策略逻辑和风险后谨慎使用。
+- **Leverage setup fails:** Check long/short position mode and the API key's trade permission.
+- **Insufficient margin:** Reduce `fixed_open_sz` or `lever`, or add funds to the trading account.
+- **State after a restart:** The bot restores local state from `state/trader_state.json`. Compare it with your actual OKX positions after restarting.
+
+## Disclaimer
+
+This project is for learning and research. Cryptocurrency derivatives trading carries substantial risk. Understand the strategy and its failure modes before using it with real funds. The author is not responsible for losses caused by its use.
